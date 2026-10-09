@@ -33,6 +33,12 @@ export interface RenderPluginOptions {
   /** Encoder quality (webp/png); ignored for bmp. */
   quality?: number;
   /**
+   * Budget of the document's raster cache, in bytes of encoded images
+   * (default 128 MiB). Smaller keeps memory low on phones; re-crossing a
+   * zoom or scrolling back may then re-render instead of hitting the cache.
+   */
+  cacheBytes?: number;
+  /**
    * Diagnostic logging: tile scheduling, settle timing, fetch outcomes —
    * the counters that catch convergence issues in long sessions. Console
    * `debug` level; off by default.

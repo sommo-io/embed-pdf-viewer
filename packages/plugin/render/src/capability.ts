@@ -40,7 +40,7 @@ export function createRenderCapability(
   // Document-lifetime cache; keys embed the conformed width + epoch, so
   // the render points are the cache axis and staleness is a new key, never
   // a flush.
-  const store = new RasterStore();
+  const store = new RasterStore(options.cacheBytes);
 
   // The policy is a DOCUMENT FACT on the kernel's registry — materialized
   // before publish (one lifecycle, in the kernel). This plugin composes it
