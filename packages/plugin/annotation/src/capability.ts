@@ -227,6 +227,9 @@ export function createAnnotationCapability(
       handleTol: (cs.handles.hitSize / 2 / s) * boost,
       knobTol: (cs.knob.hitSize / 2 / s) * boost,
       knobOffset: cs.knob.offset / s,
+      // Drawn and grabbed alike (never boosted): a side under two touch grab
+      // zones shows no edge handles on it (sommo-io fork, see geomHandles).
+      edgeHandleMinSide: (cs.handles.hitSize * TOUCH_GRAB_BOOST) / s,
     };
   };
   /** Finger-sized grab zones: 2× the mouse tolerances lands a ~24px handle hit
@@ -309,12 +312,14 @@ export function createAnnotationCapability(
       c.zoom === zoom
     )
       return c.v;
+    const geom = chromeGeomAt(scale);
     let v = coreChrome(
       m,
       pon,
       pageBoxOf(pon),
-      chromeGeomAt(scale).knobOffset,
+      geom.knobOffset,
       viewEnv(zoom, rotation),
+      geom.edgeHandleMinSide,
     );
     // `guides.enabled` is presentation config, filtered HERE so the emitted
     // chrome stays authoritative for every painter (default and headless alike).

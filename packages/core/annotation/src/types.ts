@@ -553,6 +553,11 @@ export interface ChromeGeom {
   knobTol: number;
   /** How far the rotate knob hangs off the selection edge. */
   knobOffset: number;
+  /**
+   * A box side shorter than this shows no edge handles on it (see
+   * `geomHandles`). Optional: absent keeps all eight (sommo-io fork).
+   */
+  edgeHandleMinSide?: number;
 }
 
 export interface PointerInput {

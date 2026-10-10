@@ -214,7 +214,7 @@ export function geomRotation(g: Geom): number {
   return 0;
 }
 
-const rectCenter = (r: Rect): Vec => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+export const rectCenter = (r: Rect): Vec => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
 
 const rotateAboutM = (pivot: Vec, deg: number): Mat2D<'content', 'content'> =>
   rotateAbout(pivot as PointIn<'content'>, deg * DEG2RAD);
@@ -1195,11 +1195,22 @@ export function geomHit(
   return g.quads.some((q) => pointInQuad(p, textQuadRing(q)));
 }
 
-export function geomHandles(g: Geom): Handle[] {
+/**
+ * The resize/vertex handles of a geometry. `edgeHandleMinSide` (content
+ * units, optional) drops a box's edge handles on a side shorter than it: the
+ * n/s handles when the box is narrow, e/w when it is short. There they sat
+ * between two corners whose grab zones already cover them (sommo-io fork).
+ */
+export function geomHandles(g: Geom, edgeHandleMinSide = 0): Handle[] {
   if (g.t === 'rect' || g.t === 'text') {
     const rot = g.rot ?? 0;
     const c = rectCenter(g.rect);
-    const handles: Handle[] = RECT_HANDLES.map((h) => ({
+    const narrow = g.rect.width < edgeHandleMinSide;
+    const short = g.rect.height < edgeHandleMinSide;
+    const kept = RECT_HANDLES.filter(
+      (h) => !((narrow && (h === 'n' || h === 's')) || (short && (h === 'e' || h === 'w'))),
+    );
+    const handles: Handle[] = kept.map((h) => ({
       id: h,
       // box handles sit on the UNROTATED rect; rotate each into place so they
       // ride the tilted box. The cursor rotates WITH the handle (the visually
