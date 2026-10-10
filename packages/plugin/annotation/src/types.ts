@@ -69,6 +69,13 @@ export interface ChromeSettings {
     size: number;
     /** Grab-zone square side, px — keep ≥ 24 for touch. */
     hitSize: number;
+    /**
+     * sommo-io fork: a side of the selection shorter than this (px) shows no
+     * edge handle on it, so a small object keeps its corners and its body.
+     * Default 0 (always eight handles, as upstream); a touch UI sets about
+     * its finger grab zone (px).
+     */
+    edgeMinSide?: number;
     fill: string;
     /** Overrides `accent`. */
     stroke?: string;

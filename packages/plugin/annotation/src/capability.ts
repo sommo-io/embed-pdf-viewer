@@ -227,9 +227,9 @@ export function createAnnotationCapability(
       handleTol: (cs.handles.hitSize / 2 / s) * boost,
       knobTol: (cs.knob.hitSize / 2 / s) * boost,
       knobOffset: cs.knob.offset / s,
-      // Drawn and grabbed alike (never boosted): a side under two touch grab
-      // zones shows no edge handles on it (sommo-io fork, see geomHandles).
-      edgeHandleMinSide: (cs.handles.hitSize * TOUCH_GRAB_BOOST) / s,
+      // Drawn and grabbed alike (never boosted): a side under
+      // `handles.edgeMinSide` shows no edge handles on it (sommo-io fork, see geomHandles).
+      edgeHandleMinSide: (cs.handles.edgeMinSide ?? 0) / s,
     };
   };
   /** Finger-sized grab zones: 2× the mouse tolerances lands a ~24px handle hit
