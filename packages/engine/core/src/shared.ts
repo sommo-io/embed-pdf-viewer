@@ -109,6 +109,7 @@ export type { CachePins } from './dto/CachePins';
 export { DEFAULT_PDF_SAVE_MODE } from './dto/PdfSaveMode';
 export type { SessionKind } from './dto/SessionKind';
 export type { PdfSaveMode } from './dto/PdfSaveMode';
+export type { PageCropBox } from './dto/PageCropBox';
 export type {
   FontEmbeddingPermission,
   FontHandle,

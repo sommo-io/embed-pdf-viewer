@@ -25,6 +25,7 @@ import type { PageListSnapshot } from '../dto/PageListSnapshot';
 import type { PageNetworkRenderFormat, PageRaster, PageRenderOptions } from '../dto/PageRender';
 import type { PageTextSnapshot } from '../dto/PageTextSnapshot';
 import type { DocumentActionsSnapshot } from '../dto/PdfAction';
+import type { PageCropBox } from '../dto/PageCropBox';
 import type { PdfSaveMode } from '../dto/PdfSaveMode';
 import type { PieceInfoPatch, PieceInfoSnapshot } from '../dto/PieceInfo';
 import type { SerializedEngineError } from '../errors/EngineError';
@@ -939,6 +940,8 @@ export interface DocumentSaveBufferWorkerRequest {
   docId: string;
   layerName?: string;
   mode: PdfSaveMode;
+  /** sommo-io fork: CropBoxes written into this save only. */
+  cropBoxes?: readonly PageCropBox[];
 }
 
 export interface DocumentSaveFileWorkerRequest {
