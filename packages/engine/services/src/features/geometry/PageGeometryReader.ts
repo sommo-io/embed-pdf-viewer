@@ -87,7 +87,7 @@ export class PageGeometryReader {
     throwIfAborted(signal);
     const { fn, mem } = this.runtime;
     const pool = this.session.pagePool();
-    const pagePtr = pool.acquire(pageObjectNumber);
+    const pagePtr = pool.acquire(pageObjectNumber, { warm: true }); // sommo-io fork: warm page
 
     try {
       throwIfAborted(signal);
@@ -128,7 +128,7 @@ export class PageGeometryReader {
         fn.FPDFText_ClosePage(textPagePtr);
       }
     } finally {
-      pool.release(pageObjectNumber);
+      pool.release(pageObjectNumber, { warm: true });
     }
   }
 

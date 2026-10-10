@@ -396,6 +396,7 @@ export class DocumentSession {
 
   /** Record one successful mutation; called by mutation paths. */
   noteMutation(): void {
+    this.pages?.closeWarm(); // sommo-io fork: a mutated document re-parses its pages
     this.mutationSeqCounter++;
   }
 
