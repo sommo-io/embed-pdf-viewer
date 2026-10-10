@@ -10,13 +10,15 @@
 // ("@embedpdf/engine-services": "npm:@sommo-io/embedpdf-engine-services@…").
 // Build the packages first (`npx turbo run build --filter=…`). Auth comes
 // from NODE_AUTH_TOKEN (a token with write:packages, or the workflow's
-// GITHUB_TOKEN).
+// GITHUB_TOKEN). Each package also gets the repository's LICENSE and NOTICE.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const PACKAGES = [
+  'packages/engine/core',
+  'packages/engine/main',
   'packages/engine/services',
   'packages/core/annotation',
   'packages/plugin/annotation',
@@ -55,6 +57,10 @@ for (const dir of PACKAGES) {
     directory: dir,
   };
   writeFileSync(join(packed, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  // Apache-2.0 4(a) and 4(d): every published package carries the licence and
+  // the upstream NOTICE, whatever the package's own `files` list includes.
+  copyFileSync(join(root, 'LICENSE'), join(packed, 'LICENSE'));
+  copyFileSync(join(root, 'NOTICE'), join(packed, 'NOTICE'));
   const args = ['publish', packed, '--registry', REGISTRY, '--tag', 'sommo'];
   if (dryRun) args.push('--dry-run');
   execFileSync('npm', args, { stdio: 'inherit' });
