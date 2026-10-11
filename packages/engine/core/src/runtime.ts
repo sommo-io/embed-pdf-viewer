@@ -127,6 +127,7 @@ export type {
   SignaturesDigestWorkerRequest,
   SignaturesRevisionBytesWorkerRequest,
   DocumentVersionWorkerRequest,
+  DocumentReplaceWorkerRequest,
   SignaturesPrepareWorkerRequest,
   SignaturesCompleteWorkerRequest,
   SignaturesAbortWorkerRequest,

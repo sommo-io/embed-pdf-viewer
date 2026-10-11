@@ -24,6 +24,8 @@ import type {
   PdfSize,
   DocCapability,
   PdfSaveMode,
+  DocumentReplaceOptions,
+  DocumentReplaceResult,
   DocumentMetadata,
   MetadataPatch,
   MetadataUpdateResult,
@@ -51,6 +53,8 @@ export type {
   PdfSize,
   DocCapability,
   PdfSaveMode,
+  DocumentReplaceOptions,
+  DocumentReplaceResult,
   DocumentMetadata,
   MetadataPatch,
   MetadataUpdateResult,
@@ -327,6 +331,18 @@ export interface DocumentsCapability {
    * is absent there). Defaults to the active document.
    */
   downloadLayer(id?: string): Promise<Uint8Array>;
+  /**
+   * sommo-io fork: point an open document at new bytes in place. The
+   * document keeps its id, plugins, view and the rasters of pages the
+   * caller did not list in `changedPages`; plugins re-read on
+   * `document.replaced`. Rejects (leaving the document as it was) when the
+   * bytes do not open, or on an engine without `DocumentHandle.replace`.
+   */
+  replace(
+    id: string,
+    bytes: Uint8Array,
+    options?: DocumentReplaceOptions,
+  ): Promise<DocumentReplaceResult>;
   /**
    * Session authority over a document — the sanctioned surface for the ONE
    * chrome exception in permissions.md: kernel-level features with a 1:1

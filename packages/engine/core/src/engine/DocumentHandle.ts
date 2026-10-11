@@ -17,6 +17,10 @@ import type { PdfSaveMode } from '../dto/PdfSaveMode';
 import type { DocumentEventStream } from '../events/DocumentEventStream';
 import type { PageObjectNumber } from '../identity/PageObjectNumber';
 import type { BaseVersionInfo } from '../signature/types';
+import type {
+  DocumentReplaceOptions,
+  DocumentReplaceResult,
+} from '../mutation/DocumentReplaceResult';
 import { AbortablePromise } from '../promise/AbortablePromise';
 
 export interface DocumentCapabilities {
@@ -134,5 +138,14 @@ export interface DocumentHandle {
    * with `sessionKind: 'plain'`.
    */
   downloadLayer?(): AbortablePromise<Uint8Array>;
+  /**
+   * sommo-io fork: replace the open document's bytes in place. The handle,
+   * its id and everything bound to it stay; the new bytes are read from
+   * now on and `document.replaced` is emitted. Local engine only.
+   */
+  replace?(
+    bytes: Uint8Array,
+    options?: DocumentReplaceOptions,
+  ): AbortablePromise<DocumentReplaceResult>;
   close(): AbortablePromise<void>;
 }

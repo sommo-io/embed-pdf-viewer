@@ -256,7 +256,11 @@ export function createMeasurementEffects(ctx: Context, config: MeasurementConfig
       doc.events.subscribe((event) => {
         if (event.type === 'page.viewportsChanged') {
           void refresh(event.pageObjectNumber).catch(() => {});
-        } else if (event.type === 'stream.desynced' || event.type === 'document.versioned') {
+        } else if (
+          event.type === 'stream.desynced' ||
+          event.type === 'document.versioned' ||
+          event.type === 'document.replaced' // sommo-io fork
+        ) {
           hydrate();
         }
       }),

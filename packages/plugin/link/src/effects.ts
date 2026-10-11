@@ -33,6 +33,10 @@ export function registerLinkEffects(ctx: EffectContext<LinkState, LinkAction>): 
       case 'annotation.deleted':
         refetch(event.pageObjectNumber);
         break;
+      // sommo-io fork: new bytes in place; every cached page may differ.
+      case 'document.replaced':
+        for (const pon of Object.keys(ctx.getState().pages)) refetch(Number(pon));
+        break;
       default:
         break;
     }

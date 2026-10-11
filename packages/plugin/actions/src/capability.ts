@@ -1098,7 +1098,11 @@ export function createActionsCapability(
     // Optional-chained end to end: unit harnesses fake `ctx.doc` without an
     // event stream; a real DocumentHandle always carries one.
     const unsubscribe = ctx.doc?.events?.subscribe((event) => {
-      if (event.type.startsWith('annotation.') || event.type === 'stream.desynced') {
+      if (
+        event.type.startsWith('annotation.') ||
+        event.type === 'stream.desynced' ||
+        event.type === 'document.replaced' // sommo-io fork: new bytes in place
+      ) {
         lifecycleCache.clear();
       }
     });

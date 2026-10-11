@@ -210,6 +210,20 @@ export interface DocumentVersionWorkerRequest {
   layerName?: string;
 }
 
+/**
+ * sommo-io fork: point an open session at new bytes in place (same id; the
+ * worker closes the old PDFium document after the new one opened).
+ * `bytes` is transferred.
+ */
+export interface DocumentReplaceWorkerRequest {
+  kind: 'document.replace';
+  jobId: WorkerJobId;
+  docId: string;
+  layerName?: string;
+  bytes: ArrayBuffer;
+  password?: string;
+}
+
 export interface SignaturesPrepareWorkerRequest {
   kind: 'signatures.prepare';
   jobId: WorkerJobId;
@@ -1169,6 +1183,7 @@ export type WorkerRequest =
   | SignaturesDigestWorkerRequest
   | SignaturesRevisionBytesWorkerRequest
   | DocumentVersionWorkerRequest
+  | DocumentReplaceWorkerRequest
   | SignaturesPrepareWorkerRequest
   | SignaturesCompleteWorkerRequest
   | SignaturesAbortWorkerRequest
@@ -1198,6 +1213,7 @@ export type WorkerResultPayload =
   | { tag: 'signatures.digest'; digest: ArrayBuffer }
   | { tag: 'signatures.revisionBytes'; bytes: ArrayBuffer; size: number }
   | { tag: 'document.version'; version: BaseVersionInfo }
+  | { tag: 'document.replace'; layout: PageListSnapshot }
   | { tag: 'signatures.prepare'; result: SignaturePrepared }
   | {
       tag: 'signatures.complete';

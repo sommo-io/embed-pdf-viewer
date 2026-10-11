@@ -24,6 +24,7 @@ import type {
 import type { MetadataUpdateResult } from '../mutation/MetadataUpdateResult';
 import type { AnnotationFlattenResult } from '../mutation/AnnotationFlattenResult';
 import type { PageDeleteResult } from '../mutation/PageDeleteResult';
+import type { DocumentReplaceResult } from '../mutation/DocumentReplaceResult';
 import type { PageFlattenResult, PageFlattenUsage } from '../mutation/PageFlattenResult';
 import type { RedactionApplyResult } from '../mutation/RedactionApplyResult';
 import type { PageInsertResult } from '../mutation/PageInsertResult';
@@ -182,6 +183,16 @@ export type DocumentEvent =
       signingId: string;
       origin: EventOrigin;
     }
+  | ({
+      /**
+       * sommo-io fork: the open document now reads new bytes (same id,
+       * plugins and view). Consumers re-read what they keep from the
+       * document, like after `document.versioned`; rasters of
+       * `changedPageObjectNumbers` (all pages when `null`) are stale.
+       */
+      type: 'document.replaced';
+      origin: EventOrigin;
+    } & DocumentReplaceResult)
   | {
       /**
        * The session moved to a new saved version (a completed signature,

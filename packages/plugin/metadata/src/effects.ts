@@ -27,6 +27,13 @@ export function registerMetadataEffects(ctx: EffectContext<MetadataState, Metada
     if (event.type === 'metadata.updated') {
       ctx.dispatch({ type: 'SET', metadata: event.metadata });
     }
+    // sommo-io fork: new bytes in place carry their own Info dict.
+    if (event.type === 'document.replaced') {
+      void doc.metadata.read().then(
+        (metadata) => ctx.dispatch({ type: 'SET', metadata }),
+        () => {},
+      );
+    }
   });
   ctx.cleanup(unsubscribe);
 }

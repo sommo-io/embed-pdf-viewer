@@ -1,5 +1,7 @@
 import {
   type BaseVersionInfo,
+  type DocumentReplaceOptions,
+  type DocumentReplaceResult,
   AbortablePromise,
   DEFAULT_PDF_SAVE_MODE,
   EngineError,
@@ -111,6 +113,65 @@ export class LocalDocumentHandle implements DocumentHandle {
    * The saved version this session is on: SHA-256 and length of the
    * loaded bytes (for a layer session, of its base).
    */
+  /**
+   * sommo-io fork: replace this document's bytes in place (see
+   * `DocumentHandle.replace`). The bytes are transferred to the worker.
+   */
+  replace(
+    bytes: Uint8Array,
+    options: DocumentReplaceOptions = {},
+  ): AbortablePromise<DocumentReplaceResult> {
+    if (this.closed) {
+      return AbortablePromise.rejectReason(
+        new EngineError(EngineErrorCode.DocNotOpen, `document not open: ${this.id}`),
+      );
+    }
+    try {
+      this.guard.assertCapability('doc.open');
+    } catch (err) {
+      return AbortablePromise.rejectReason(err);
+    }
+    const docId = this.id;
+    const buffer =
+      bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+        ? (bytes.buffer as ArrayBuffer)
+        : (bytes.slice().buffer as ArrayBuffer);
+    const password = options.password;
+    const submission = this.queue.enqueue<WorkerResultPayload>(
+      {
+        buildPack: (jobId: JobId) =>
+          wirePack(
+            {
+              kind: 'document.replace',
+              jobId,
+              docId,
+              bytes: buffer,
+              ...(password !== undefined ? { password } : {}),
+            },
+            [buffer],
+          ),
+      },
+      { priority: Priority.HIGH },
+    );
+    return AbortablePromise.run<DocumentReplaceResult>(async (signal) => {
+      const onAbort = () => submission.abort(signal.reason);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      const payload = await submission;
+      if (payload.tag !== 'document.replace') {
+        throw new EngineError(EngineErrorCode.WireFormat, `unexpected payload tag: ${payload.tag}`);
+      }
+      // A page hint holds only when the new bytes keep the same pages.
+      const hint = options.changedPages;
+      const kept = new Set(payload.layout.pages.map((p) => p.pageObjectNumber));
+      const changedPageObjectNumbers =
+        hint && hint.every((pon) => kept.has(pon)) ? [...hint] : null;
+      const result: DocumentReplaceResult = { layout: payload.layout, changedPageObjectNumbers };
+      this.publisher.publishLocal({ type: 'document.replaced', ...result });
+      return result;
+    });
+  }
+
   version(): AbortablePromise<BaseVersionInfo> {
     if (this.closed) {
       return AbortablePromise.rejectReason(

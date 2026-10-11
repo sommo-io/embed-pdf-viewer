@@ -461,7 +461,11 @@ export function createSelectionCapability(
   });
   ctx.cleanup(offStore);
   const offEvents = ctx.doc?.events.subscribe((event) => {
-    if (event.type === 'redaction.applied' || event.type === 'pages.flattened') {
+    if (
+      event.type === 'redaction.applied' ||
+      event.type === 'pages.flattened' ||
+      event.type === 'document.replaced' // sommo-io fork: new bytes in place
+    ) {
       invalidateContent();
     }
   });

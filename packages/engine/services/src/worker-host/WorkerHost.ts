@@ -39,6 +39,7 @@ import {
   type SignaturesDigestWorkerRequest,
   type SignaturesRevisionBytesWorkerRequest,
   type DocumentVersionWorkerRequest,
+  type DocumentReplaceWorkerRequest,
   type DocumentProtection,
   type FontsRegisterWorkerRequest,
   type FontsAddFallbackWorkerRequest,
@@ -109,6 +110,7 @@ import { BaseDocumentRegistry } from '../document-session/lifecycle/BaseDocument
 import {
   openFatMemoryDocument,
   openLayerDocument,
+  type OpenedPdfDocument,
 } from '../document-session/lifecycle/PdfDocumentOpener';
 import { DocumentActionsReader } from '../features/actions';
 import {
@@ -325,6 +327,9 @@ export class WorkerHost {
           break;
         case 'document.version':
           resultPack = this.handleDocumentVersion(msg);
+          break;
+        case 'document.replace':
+          resultPack = this.handleDocumentReplace(msg, ctrl.signal);
           break;
         case 'signatures.prepare':
           resultPack = this.handleSignaturesPrepare(msg);
@@ -607,6 +612,8 @@ export class WorkerHost {
     session: DocumentSession,
     bytes: Uint8Array,
     password: string | null,
+    // sommo-io fork: `document.replace` installs into an open session instead.
+    adopt: (handle: OpenedPdfDocument) => void = (handle) => session.openFromHandle(handle),
   ): void {
     if (session.sessionKind === 'plain') {
       const plain = openFatMemoryDocument(this.runtime, bytes, password);
@@ -620,7 +627,7 @@ export class WorkerHost {
         signed = false;
       }
       if (!signed) {
-        session.openFromHandle(plain);
+        adopt(plain);
         return;
       }
       plain.close();
@@ -632,7 +639,7 @@ export class WorkerHost {
       bytes,
       password,
     });
-    session.openFromHandle(openLayerDocument(this.runtime, base, { kind: 'fresh' }, password));
+    adopt(openLayerDocument(this.runtime, base, { kind: 'fresh' }, password));
     session.persistLayerArtifact = false;
   }
 
@@ -681,6 +688,29 @@ export class WorkerHost {
     const session = this.requireSession(req);
     const bytes = new SignatureReader(this.runtime, session).revisionBytes(req.revisionIndex);
     return wirePack({ tag: 'signatures.revisionBytes', bytes, size: bytes.byteLength }, [bytes]);
+  }
+
+  /**
+   * sommo-io fork: point the open session at new bytes in place. The new
+   * document opens first (a failure leaves the session untouched), then
+   * replaces the old one under the same session id: page revisions bump and
+   * version-keyed caches rebuild (`DocumentSession.install`).
+   */
+  private handleDocumentReplace(
+    req: DocumentReplaceWorkerRequest,
+    signal: AbortSignal,
+  ): WirePack<WorkerResultPayload> {
+    const session = this.requireSession(req);
+    const password = req.password ?? session.password ?? null;
+    // Native models hold pointers into the document they were built on.
+    disposeFormModel(this.runtime, session);
+    disposeSignatureModel(this.runtime, session);
+    this.openSignedAware(session, new Uint8Array(req.bytes), password, (handle) =>
+      session.install(handle),
+    );
+    if (req.password !== undefined) session.password = req.password;
+    const layout = new PagesReader(this.runtime, session).read(signal);
+    return wirePack({ tag: 'document.replace', layout });
   }
 
   private handleDocumentVersion(req: DocumentVersionWorkerRequest): WirePack<WorkerResultPayload> {

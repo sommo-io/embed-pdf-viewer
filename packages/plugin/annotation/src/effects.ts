@@ -79,7 +79,8 @@ export function registerAnnotationEffects(
       }
       return;
     }
-    if (event.type === 'document.versioned') {
+    // sommo-io fork: `document.replaced` (new bytes in place) re-reads the same way.
+    if (event.type === 'document.versioned' || event.type === 'document.replaced') {
       void host().rehydrate();
       return;
     }
