@@ -76,11 +76,40 @@ export function createStageCapability(
     cancelAnimationFrame?: (handle: number) => void;
   };
   const canAnimate = !!config.scheduler || typeof host.requestAnimationFrame === 'function';
-  const scheduler: Scheduler =
+  const hostScheduler: Scheduler =
     config.scheduler ??
     (typeof host.requestAnimationFrame === 'function'
       ? { raf: (cb) => host.requestAnimationFrame!(cb), caf: (h) => host.cancelAnimationFrame!(h) }
       : { raf: () => 0, caf: () => {} }); // no host frames → navigation jumps instantly
+  // sommo-io fork: every frame this lens asks for is tracked and cancelled when
+  // its document closes. Before, a page jump (240 ms tween) or the 150 ms rest
+  // countdown still running at close ran its next frame against a removed
+  // state slice: `TypeError: Cannot read properties of undefined (reading 'vp')`.
+  const pendingFrames = new Set<number>();
+  let disposed = false;
+  const scheduler: Scheduler = {
+    raf: (cb) => {
+      if (disposed) return 0;
+      let handle = 0;
+      let ran = false; // an instant scheduler runs the callback inside raf()
+      handle = hostScheduler.raf((t) => {
+        ran = true;
+        pendingFrames.delete(handle);
+        if (!disposed) cb(t);
+      });
+      if (!ran) pendingFrames.add(handle);
+      return handle;
+    },
+    caf: (handle) => {
+      pendingFrames.delete(handle);
+      hostScheduler.caf(handle);
+    },
+  };
+  ctx.cleanup(() => {
+    disposed = true;
+    for (const handle of pendingFrames) hostScheduler.caf(handle);
+    pendingFrames.clear();
+  });
 
   const cam = () => ctx.getState().camera;
   const vp = () => ctx.getState().vp;

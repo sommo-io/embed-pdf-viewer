@@ -36,6 +36,7 @@ function harness(
     metrics: ReturnType<StageCapability['scrollMetrics']>;
   }> = [];
   let stage!: StageCapability;
+  const teardowns: Array<() => void | Promise<void>> = [];
   const ctx = {
     id: 'stage',
     documentId: 'doc',
@@ -54,6 +55,7 @@ function harness(
     },
     subscribe: () => () => {},
     document: () => meta,
+    cleanup: (fn: () => void | Promise<void>) => teardowns.push(fn),
   } as unknown as PluginContext<StageState, StageAction>;
 
   stage = createStageCapability(ctx, config);
@@ -65,7 +67,12 @@ function harness(
   // a page's rotation + bumping `revision` simulates a rotate/move/delete event,
   // exactly as the kernel's event→registry bridge would (which the stage effect
   // then turns into a `refit()`).
-  return { stage, meta, transitions };
+  // The document closes: the kernel runs the teardowns and drops the slice.
+  const close = () => {
+    for (const fn of teardowns.splice(0)) void fn();
+    state = undefined as unknown as StageState;
+  };
+  return { stage, meta, transitions, close };
 }
 
 const PORTRAIT = Array.from({ length: 5 }, () => ({ width: 600, height: 800 }));
@@ -527,6 +534,53 @@ describe('smooth scroll via the injected scheduler', () => {
     run(0); // first frame: k = 0
     run(120); // mid
     run(240); // final: k = 1 → at target
+    expect(stage.currentPage()).toBe(4);
+  });
+});
+
+describe('closing the document while the camera animates (sommo-io fork)', () => {
+  it('cancels the pending frames, and a frame that still fires does nothing', () => {
+    const frames = new Map<number, (t: number) => void>();
+    let next = 0;
+    const scheduler = {
+      raf: (cb: (t: number) => void) => {
+        frames.set(++next, cb);
+        return next;
+      },
+      caf: (handle: number) => {
+        frames.delete(handle);
+      },
+    };
+    const { stage, close } = harness(PORTRAIT, { scheduler });
+    stage.goToPage(4); // 240 ms tween
+    const run = (t: number) => {
+      const due = [...frames.values()];
+      frames.clear();
+      due.forEach((cb) => cb(t));
+    };
+    run(0);
+    expect(frames.size).toBeGreaterThan(0);
+    const stale = [...frames.values()];
+    close();
+    expect(frames.size).toBe(0); // cancelled at close
+    // A host that already queued the frame still calls it: no TypeError on 'vp'.
+    expect(() => stale.forEach((cb) => cb(120))).not.toThrow();
+  });
+
+  it('works with a scheduler that runs the frame inside raf()', () => {
+    let depth = 0;
+    const scheduler = {
+      raf: (cb: (t: number) => void) => {
+        if (depth < 50) {
+          depth += 1;
+          cb(depth * 16);
+        }
+        return 0;
+      },
+      caf: () => {},
+    };
+    const { stage } = harness(PORTRAIT, { scheduler });
+    stage.goToPage(4);
     expect(stage.currentPage()).toBe(4);
   });
 });
