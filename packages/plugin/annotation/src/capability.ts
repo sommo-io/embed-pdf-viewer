@@ -36,7 +36,6 @@ import { SelectionToken as SelectionPublicToken } from '@embedpdf/plugin-selecti
 import {
   type MeasurementAppearance,
   canMove,
-  capsFor,
   chrome as coreChrome,
   clickCreateGeom,
   contentToPdfRect,
@@ -979,11 +978,7 @@ export function createAnnotationCapability(
     const pon = ponForRef(ref);
     if (pon == null) throw new Error('[annotation] cannot resolve page for ref');
     const res = await doc.page(pon).annotations.update(ref, patch);
-    // sommo-io fork: kinds with no vector render (stamps, notes, widgets,
-    // attachments) stay baked; as 'vector' they vanished until a reopen.
-    const subtype = model().byId[refKey(ref)]?.subtype;
-    const source = subtype && capsFor(subtype).opaqueBody ? 'baked' : 'vector';
-    syncDTO(res.updated, source, res.appearance?.changed);
+    syncDTO(res.updated, 'vector', res.appearance?.changed);
   };
 
   // ── the text commit: ONE debounced write per annotation for both editors ──
