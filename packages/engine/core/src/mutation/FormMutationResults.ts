@@ -14,6 +14,11 @@ import type { MutationMeta } from './MutationMeta';
 export interface FormSetValueResult {
   /** The field read back after the write. */
   field: FormFieldDTO;
+  /**
+   * sommo-io fork: the field as it was just before the write, so a caller can
+   * undo it with `setValue(ref, previous.value)`. Local engine only.
+   */
+  previous?: FormFieldDTO;
   changedWidgets: FormWidgetRef[];
   meta: MutationMeta;
 }

@@ -1040,6 +1040,35 @@ describe.each([
   });
 });
 
+describe('programmatic update of a kind with no vector render', () => {
+  // sommo-io fork: a kind with no vector render must not turn invisible.
+  it('keeps a note baked after a programmatic update and re-fetches its appearance', async () => {
+    const h = harness();
+    const note = {
+      ...base(31),
+      subtype: 'text',
+      rect: { left: 100, bottom: 700, right: 120, top: 720 },
+      color: { r: 255, g: 255, b: 0 },
+      opacity: 1,
+      icon: 'note',
+      state: null,
+      stateModel: null,
+      inReplyTo: null,
+      replyType: null,
+    } as unknown as AnnotationDTO;
+    h.list.mockResolvedValueOnce({ annotations: [note] });
+    await h.capability.reloadPage(PON);
+    const epoch = h.capability.appearanceEpoch(PON);
+
+    const moved = { ...note, rect: { left: 110, bottom: 690, right: 130, top: 710 } };
+    h.update.mockResolvedValueOnce({ updated: moved, appearance: { changed: true } });
+    await h.capability.update(note.ref, { subtype: 'text', rect: moved.rect } as never);
+
+    expect(h.capability.pageItems(PON)[0].source).toBe('baked');
+    expect(h.capability.appearanceEpoch(PON)).not.toBe(epoch);
+  });
+});
+
 describe('distance authoring and recalibration', () => {
   it('uses the viewport at the first point, retaining that snapshot throughout the drag', async () => {
     const h = harness();
