@@ -70,7 +70,8 @@ export class LocalPageRenderService implements PageRenderService {
             options: effectiveOptions,
           }),
       },
-      { priority: Priority.HIGH },
+      // sommo-io fork: rasters below interactive work, tiles below whole pages.
+      { priority: options?.target?.kind === 'rect' ? Priority.RASTER_TILE : Priority.RASTER },
     );
     return AbortablePromise.run<PageRaster>(async (signal) => {
       const onAbort = () => submission.abort(signal.reason);
