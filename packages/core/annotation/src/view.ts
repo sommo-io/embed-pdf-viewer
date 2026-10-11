@@ -506,6 +506,7 @@ export function chrome(
   pageBox?: Rect,
   knobOffset: number = ROTATE_KNOB_OFFSET,
   view?: ViewEnv,
+  edgeHandleMinSide = 0,
 ): ChromeNode[] {
   const nodes: ChromeNode[] = [];
   if (m.draft?.g === 'marquee' && m.draft.pon === pon) {
@@ -565,7 +566,7 @@ export function chrome(
     // additionally tilts each handle GLYPH so it rides the box's orientation.
     // Suppressed during a live rotate (`rd`) — guides own that mode.
     if (!rd && annotTransformable(a) && (caps.resizable || caps.vertexEditable)) {
-      const handles = distance ? distanceHandles(distance) : geomHandles(g);
+      const handles = distance ? distanceHandles(distance) : geomHandles(g, edgeHandleMinSide);
       for (const handle of handles) {
         nodes.push({
           kind: 'handle',

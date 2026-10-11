@@ -12,6 +12,7 @@ import type { DocumentSignaturesService } from './DocumentSignaturesService';
 import type { MetadataService } from './MetadataService';
 import type { PageHandle } from './PageHandle';
 import type { PieceInfoService } from './PieceInfoService';
+import type { PageCropBox } from '../dto/PageCropBox';
 import type { PdfSaveMode } from '../dto/PdfSaveMode';
 import type { DocumentEventStream } from '../events/DocumentEventStream';
 import type { PageObjectNumber } from '../identity/PageObjectNumber';
@@ -99,7 +100,17 @@ export interface DocumentHandle {
    * Synchronous because page records are cached on `DocumentSession`.
    */
   page(pageObjectNumber: PageObjectNumber): PageHandle;
-  download(opts?: { mode?: PdfSaveMode }): AbortablePromise<Uint8Array>;
+  /**
+   * sommo-io fork: `cropBoxes` writes those CropBoxes into the downloaded
+   * file only; the open document keeps its boxes. Engines without it ignore
+   * the field (feature-detect with `doc.downloadCropBoxes === true`).
+   */
+  download(opts?: {
+    mode?: PdfSaveMode;
+    cropBoxes?: readonly PageCropBox[];
+  }): AbortablePromise<Uint8Array>;
+  /** sommo-io fork: true when `download({ cropBoxes })` writes them. */
+  readonly downloadCropBoxes?: boolean;
   /**
    * Local Node engines only: write the document to a local file without
    * moving its bytes through JS. An untouched session (no unsaved edits,

@@ -3,6 +3,7 @@ import type { PdfRuntimeModule, Ptr } from '@embedpdf/engine-runtime';
 
 import { layerSaveError, pdfSaveModeFlags } from './internal/pdfSaveMode';
 import { readSavedBuffer } from './internal/readSavedBuffer';
+import { saveThroughFileWrite } from './internal/streamedSave';
 import type { DocumentSession } from '../../document-session/DocumentSession';
 import { SignatureReader } from '../signature/SignatureReader';
 
@@ -308,6 +309,18 @@ export class DocumentSaver {
 
   saveStandaloneToBuffer(mode: PdfSaveMode): { bytes: ArrayBuffer; size: number } {
     const { mem, fn } = this.runtime;
+    // sommo-io fork: on WASM, stream the file out instead of building it on
+    // the WASM heap, which would stay that much larger for good.
+    if (this.runtime.kind === 'wasm') {
+      const docPtr = this.session.requireDocPtr();
+      const streamed = saveThroughFileWrite(this.runtime, (fileWrite) =>
+        fn.FPDF_SaveAsCopy(docPtr, fileWrite, pdfSaveModeFlags(mode)),
+      );
+      if (!streamed) {
+        throw new EngineError(EngineErrorCode.DocOpenFailed, 'failed to save document');
+      }
+      return streamed;
+    }
     // unsigned long is 64-bit on Unix native targets and 32-bit in WASM.
     const sizePtr = mem.alloc(8);
     let pdfPtr: Ptr | null = null;

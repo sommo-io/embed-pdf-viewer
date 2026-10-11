@@ -6,7 +6,9 @@ import {
   geomHit,
   placeRotateKnob,
   pointInQuad,
+  rectCenter,
   rectHandlesFor,
+  rotatePoint,
   unionRect,
 } from './geometry';
 import { capsFor, isMarkup } from './kinds';
@@ -146,6 +148,19 @@ export function groupUnionBounds(m: Model, pon: number, view?: ViewEnv): Rect | 
 }
 
 /**
+ * Whether `p` lies strictly inside a box (rect or text geometry, rotation
+ * honoured) whose width or height is under two handle grab zones — the size
+ * at which the zones cover the whole body (sommo-io fork).
+ */
+function smallBoxContains(g: Geom, p: Vec, handleTol: number): boolean {
+  if (g.t !== 'rect' && g.t !== 'text') return false;
+  const r = g.rect;
+  if (r.width >= 2 * handleTol && r.height >= 2 * handleTol) return false;
+  const q = g.rot ? rotatePoint(p, rectCenter(r), -g.rot) : p;
+  return q.x > r.x && q.x < r.x + r.width && q.y > r.y && q.y < r.y + r.height;
+}
+
+/**
  * What's under the content point.
  *  1. a resize/vertex handle of the single selection,
  *  2. an editable annotation body — a SELECTED one anywhere in its bounds (so you
@@ -187,14 +202,19 @@ export function hitTest(
         const distance =
           a.measure?.intent === 'LineDimension' &&
           distanceLayout(geometry, a.measure, hitStrokeOf(a, view));
-        const handles = distance ? distanceHandles(distance) : geomHandles(geometry);
-        if (distance) {
-          // Nearby endpoint and leader hit areas overlap at small offsets.
-          // The closest visible handle wins, regardless of declaration order.
-          const distanceToPointer = (handle: (typeof handles)[number]) =>
-            Math.hypot(handle.at.x - p.x, handle.at.y - p.y);
-          handles.sort((left, right) => distanceToPointer(left) - distanceToPointer(right));
-        }
+        const handles = distance
+          ? distanceHandles(distance)
+          : geomHandles(geometry, geom.edgeHandleMinSide);
+        // Grab zones overlap on small boxes and at small offsets: the closest
+        // visible handle wins, regardless of declaration order (sommo-io fork:
+        // upstream sorted only distance measures; boxes took the first of
+        // nw, n, ne, e, se, s, sw, w, so a corner drag often resized one axis).
+        const distanceToPointer = (handle: (typeof handles)[number]) =>
+          Math.hypot(handle.at.x - p.x, handle.at.y - p.y);
+        handles.sort((left, right) => distanceToPointer(left) - distanceToPointer(right));
+        // A box smaller than two grab zones is covered by its handles: inside
+        // it the body wins (move), its handles are grabbed from outside.
+        const insideSmallBox = smallBoxContains(geometry, p, geom.handleTol);
 
         // The text is the drag target. It owns no visible handle, and wins
         // before the annotation's sticky body bounds.
@@ -206,7 +226,7 @@ export function hitTest(
         }
         // Handles live on the PROJECTED geometry — the handle gesture then
         // runs entirely in view space (see the `handle` draft).
-        for (const h of handles) {
+        for (const h of insideSmallBox ? [] : handles) {
           if (
             Math.abs(h.at.x - p.x) <= geom.handleTol &&
             Math.abs(h.at.y - p.y) <= geom.handleTol

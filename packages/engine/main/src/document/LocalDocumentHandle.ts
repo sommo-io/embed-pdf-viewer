@@ -19,6 +19,7 @@ import {
   type MetadataService,
   type PageHandle,
   type PageObjectNumber,
+  type PageCropBox,
   type PdfSaveMode,
 } from '@embedpdf/engine-core/runtime';
 import { EventHub, SessionEventPublisher } from '@embedpdf/engine-services';
@@ -164,7 +165,12 @@ export class LocalDocumentHandle implements DocumentHandle {
     );
   }
 
-  download(opts: { mode?: PdfSaveMode } = {}): AbortablePromise<Uint8Array> {
+  /** sommo-io fork: `download({ cropBoxes })` writes them (see `DocumentHandle.download`). */
+  readonly downloadCropBoxes = true;
+
+  download(
+    opts: { mode?: PdfSaveMode; cropBoxes?: readonly PageCropBox[] } = {},
+  ): AbortablePromise<Uint8Array> {
     if (this.closed) {
       return AbortablePromise.rejectReason(
         new EngineError(EngineErrorCode.DocNotOpen, `document not open: ${this.id}`),
@@ -197,6 +203,7 @@ export class LocalDocumentHandle implements DocumentHandle {
             jobId,
             docId,
             mode,
+            ...(opts.cropBoxes?.length ? { cropBoxes: opts.cropBoxes } : {}),
           }),
       },
       { priority: Priority.HIGH },

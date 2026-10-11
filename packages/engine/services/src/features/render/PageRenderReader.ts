@@ -23,7 +23,7 @@ export class PageRenderReader {
     throwIfAborted(signal);
     const { fn } = this.runtime;
     const pool = this.session.pagePool();
-    const pagePtr = pool.acquire(pageObjectNumber);
+    const pagePtr = pool.acquire(pageObjectNumber, { warm: true }); // sommo-io fork: warm page
 
     try {
       throwIfAborted(signal);
@@ -61,7 +61,7 @@ export class PageRenderReader {
       }
       return raster;
     } finally {
-      pool.release(pageObjectNumber);
+      pool.release(pageObjectNumber, { warm: true });
     }
   }
 }

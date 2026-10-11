@@ -72,7 +72,12 @@ export function applyWidgetStyle(
   }
 
   if (style.textAlign !== undefined) {
-    fn.EPDFAnnot_SetTextAlignment(annotPtr, textAlignmentToCode(style.textAlign));
+    // `EPDFAnnot_SetTextAlignment` refuses widgets (returns false and writes
+    // nothing), so /Q goes into the widget's own dictionary. The text-field
+    // appearance generator reads /Q from the widget first, then its field.
+    const code = textAlignmentToCode(style.textAlign);
+    if (!fn.EPDFAnnot_SetTextAlignment(annotPtr, code))
+      fn.EPDFAnnot_SetNumberValue(annotPtr, 'Q', code);
   }
 }
 

@@ -134,6 +134,7 @@ import { PieceInfoAccessor } from '../features/pieceinfo';
 import { RedactionApplier } from '../features/redaction';
 import { PageRenderReader } from '../features/render';
 import { DocumentSaver } from '../features/save';
+import { withCropBoxes } from '../features/save/cropBoxOverride';
 import { SearchReader } from '../features/search';
 import { SecurityReader } from '../features/security';
 import {
@@ -1381,6 +1382,15 @@ export class WorkerHost {
     req: DocumentSaveBufferWorkerRequest,
   ): WirePack<WorkerResultPayload> {
     const session = this.requireSession(req);
+    // sommo-io fork: CropBoxes for this download only (see withCropBoxes).
+    if (req.cropBoxes?.length) {
+      const saved = withCropBoxes(this.runtime, session, req.cropBoxes, () =>
+        new DocumentSaver(this.runtime, session).saveStandaloneToBuffer(req.mode),
+      );
+      return wirePack({ tag: 'document.saveBuffer', bytes: saved.bytes, size: saved.size }, [
+        saved.bytes,
+      ]);
+    }
     // A save that changes nothing returns the loaded bytes verbatim: a
     // signed file must come back exactly as it was sealed. Whether anything
     // changed is the saver's answer (`snapshot`): the session's counter when

@@ -1,0 +1,30 @@
+# sommo-io fork: publish our patched packages to GitHub Packages
+# (scripts/sommo-publish.mjs). Push a tag `sommo-v<version>`, for example
+# `sommo-v3.0.0-next.14-sommo.1`. Upstream's release workflow only runs on main.
+name: Publish sommo-io packages
+
+on:
+  push:
+    tags: ['sommo-v*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@sommo-io'
+      - run: pnpm install --frozen-lockfile --filter "@embedpdf/engine-services..." --filter "@embedpdf/core-annotation..." --filter "@embedpdf/plugin-annotation..."
+      - run: npx turbo run build --filter=@embedpdf/engine-services --filter=@embedpdf/core-annotation --filter=@embedpdf/plugin-annotation
+      - run: node scripts/sommo-publish.mjs "${GITHUB_REF_NAME#sommo-v}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

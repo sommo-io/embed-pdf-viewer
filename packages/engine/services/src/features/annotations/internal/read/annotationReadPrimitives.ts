@@ -324,6 +324,39 @@ export function readTextAlignment(fn: PdfFunctions, annotPtr: Ptr): number {
 }
 
 /**
+ * Read a widget's `/Q`. `EPDFAnnot_GetTextAlignment` only answers for
+ * free-text and redact annotations, so widgets read the number straight from
+ * their own dictionary, then from the field above it (`/Q` is inheritable,
+ * ISO 32000 §12.7.3.3). An absent `/Q` reads back as `0` (left).
+ */
+export function readWidgetTextAlignment(
+  fn: PdfFunctions,
+  mem: PdfRuntimeMemory,
+  annotPtr: Ptr,
+): number {
+  return withScratch(mem, F32_BYTES, (buf) => {
+    if (fn.FPDFAnnot_HasKey(annotPtr, 'Q') && fn.FPDFAnnot_GetNumberValue(annotPtr, 'Q', buf)) {
+      return Math.round(readF32(mem, buf));
+    }
+    // Field chain: kids point to their field through /Parent (bounded, as cycles are possible).
+    let owner: Ptr = fn.FPDFAnnot_HasKey(annotPtr, 'Parent')
+      ? fn.FPDFAnnot_GetLinkedAnnot(annotPtr, 'Parent')
+      : NULL_PTR;
+    for (let depth = 0; owner && depth < 32; depth++) {
+      const found = fn.FPDFAnnot_HasKey(owner, 'Q') && fn.FPDFAnnot_GetNumberValue(owner, 'Q', buf);
+      const next =
+        !found && fn.FPDFAnnot_HasKey(owner, 'Parent')
+          ? fn.FPDFAnnot_GetLinkedAnnot(owner, 'Parent')
+          : NULL_PTR;
+      fn.FPDFPage_CloseAnnot(owner);
+      if (found) return Math.round(readF32(mem, buf));
+      owner = next;
+    }
+    return 0;
+  });
+}
+
+/**
  * Read `/OverlayText` of a redact annotation via `EPDFAnnot_GetOverlayText`
  * (standard UTF-16 byte-length ABI). Returns `null` when the key is absent
  * (the redaction has no label), otherwise the — possibly empty — label.

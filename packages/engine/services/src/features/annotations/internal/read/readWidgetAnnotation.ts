@@ -5,7 +5,7 @@ import { withScratchN } from '../../../../runtime/memory/scratch';
 import { readI32 } from '../../../../runtime/memory/structs';
 import { standardFontFromCode } from '../standardFont';
 import { textAlignmentFromCode } from '../textAlignment';
-import { readDefaultAppearance, readTextAlignment } from './annotationReadPrimitives';
+import { readDefaultAppearance, readWidgetTextAlignment } from './annotationReadPrimitives';
 import { readBorderFields } from './readStyle';
 
 const MK_BORDER_COLOR = 0; // EPDF_MK_COLOR_BC
@@ -55,7 +55,7 @@ export function readWidget(
           fontColor: da.color,
         }
       : {}),
-    textAlign: textAlignmentFromCode(readTextAlignment(fn, annotPtr)),
+    textAlign: textAlignmentFromCode(readWidgetTextAlignment(fn, mem, annotPtr)),
     // Joined by the caller (joinWidgetFieldNumbers): the /Parent target is
     // a FIELD dictionary, which annotation-plane primitives cannot follow.
     fieldObjectNumber: 0,
