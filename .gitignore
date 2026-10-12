@@ -39,3 +39,4 @@ tooling/bundler-matrix/apps/*/.angular
 tooling/bundler-matrix/apps/*/.parcel-cache
 tooling/bundler-matrix/apps/*/out-tsc
 tooling/bundler-matrix/results.json
+sommo-dist/
