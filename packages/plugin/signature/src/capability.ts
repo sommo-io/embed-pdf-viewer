@@ -312,6 +312,7 @@ export function createSignatureCapability(
           ctx.dispatch({ type: 'PENDING', pending: null });
           return;
         case 'document.versioned':
+        case 'document.replaced': // sommo-io fork: new bytes in place
         case 'stream.desynced':
           // Byte-level facts moved: re-read them and re-judge.
           void refresh()

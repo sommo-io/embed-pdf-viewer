@@ -124,6 +124,26 @@ describe('kernel: document events → page registry', () => {
     expect(after.pages.map((p) => p.pageObjectNumber)).toEqual([1, 2, 3]);
   });
 
+  // sommo-io fork: new bytes in place.
+  it('a document.replaced event swaps the registry and bumps revision', async () => {
+    const { engine, events } = fakeEngine([page(1, 0), page(2, 1), page(3, 2)]);
+    const capture = captureDoc();
+    const kernel = createKernel({ engine, plugins: [capture.plugin] });
+    await kernel.documents.open({ kind: 'bytes', id: 'doc-1', bytes: new Uint8Array() });
+
+    events.emit({
+      type: 'document.replaced',
+      layout: { pageCount: 2, pages: [page(1, 0), page(4, 1)] },
+      changedPageObjectNumbers: null,
+      origin: { kind: 'local', sessionId: 's', sub: null, ts: 1, serverId: null },
+    });
+
+    const after = capture.ctx().document()!;
+    expect(after.revision).toBe(1);
+    expect(after.pages.map((p) => p.pageObjectNumber)).toEqual([1, 4]);
+    expect(after.pageCount).toBe(2);
+  });
+
   it('a pages.deleted event shrinks the registry', async () => {
     const { engine, events } = fakeEngine([page(1, 0), page(2, 1), page(3, 2)]);
     const capture = captureDoc();

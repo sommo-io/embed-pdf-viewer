@@ -86,7 +86,8 @@ export class FormMutator {
     }
 
     const changed = this.applyWrite(resolved.fieldObjectNumber, value);
-    return this.readBack(resolved.fieldObjectNumber, changed);
+    // sommo-io fork: report the field before the write (undo).
+    return { ...this.readBack(resolved.fieldObjectNumber, changed), previous: before };
   }
 
   reset(ref: FormFieldRef, signal: AbortSignal): FormSetValueResult {
@@ -94,6 +95,8 @@ export class FormMutator {
     const model = acquireFormModel(this.runtime, this.session);
     const resolved = resolveFieldRef(this.runtime, model, ref);
     this.assertWritable(resolved);
+    // sommo-io fork: report the field before the reset (undo).
+    const before = readFieldAt(this.runtime, model, resolved.fieldIndex, this.session.requireDocPtr());
 
     const changed = this.withChangedWidgets((buf, cap, countPtr) =>
       this.runtime.fn.EPDFForm_ResetField(
@@ -107,7 +110,7 @@ export class FormMutator {
     if (changed === null) {
       throw new EngineError(EngineErrorCode.InvalidArg, 'form field cannot be reset');
     }
-    return this.readBack(resolved.fieldObjectNumber, changed);
+    return { ...this.readBack(resolved.fieldObjectNumber, changed), previous: before };
   }
 
   importData(

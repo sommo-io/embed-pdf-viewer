@@ -912,6 +912,8 @@ export const AnnotationMoveResultSchema: z.ZodType<AnnotationMoveResult> = z.obj
 
 export const FormSetValueResultSchema: z.ZodType<FormSetValueResult> = z.object({
   field: FormFieldDTOSchema,
+  // sommo-io fork: the field before the write (undo).
+  previous: FormFieldDTOSchema.optional(),
   changedWidgets: z.array(FormWidgetRefSchema),
   meta: MutationMetaSchema,
 });

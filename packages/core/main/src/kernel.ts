@@ -50,6 +50,7 @@ function layoutFromEvent(event: DocumentEvent) {
     case 'pages.rotated':
     case 'pages.deleted':
     case 'pages.inserted':
+    case 'document.replaced': // sommo-io fork: new bytes, same session
       return event.layout;
     default:
       return null;
@@ -766,6 +767,15 @@ export function createKernel(opts: {
         );
       }
       return handle.downloadLayer();
+    },
+    // sommo-io fork: new bytes under the same document (see DocumentsCapability.replace).
+    replace: (id, bytes, options) => {
+      const handle = documentHandle(id);
+      if (!handle) return Promise.reject(new Error('[documents] no document to replace'));
+      if (!handle.replace) {
+        return Promise.reject(new Error('[documents] this engine cannot replace a document'));
+      }
+      return handle.replace(bytes, options);
     },
     // The permissions.md chrome exception: print/download are kernel verbs
     // with 1:1 capabilities, so their authority question is answered here.

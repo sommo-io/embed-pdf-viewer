@@ -70,6 +70,13 @@ export function registerRenderEffects(ctx: EffectContext<RenderState, RenderActi
     // destroys page content, so every applied page's base raster is stale —
     // and content strictly contains annotations, so annotated readers bump
     // too (see reducer.ts). Origin-agnostic like the rest of this map.
+    // sommo-io fork: new bytes in place. The named pages (all when the
+    // caller could not say) may have new content; the others keep their rasters.
+    if (event.type === 'document.replaced') {
+      const pons = event.changedPageObjectNumbers ?? allPons();
+      if (pons.length) ctx.dispatch({ type: 'INVALIDATE', scope: 'content', pons });
+      return;
+    }
     if (event.type === 'redaction.applied') {
       const pons = event.results
         .filter((r) => r.status === 'applied')

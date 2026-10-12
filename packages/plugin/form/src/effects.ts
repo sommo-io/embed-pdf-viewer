@@ -54,7 +54,11 @@ export function registerFormEffects(ctx: EffectContext<FormState, FormAction>): 
     // The session moved to new saved bytes (a completed signature, here or
     // elsewhere): field values changed under us — a signature field now
     // carries its /V — so re-read the snapshot.
-    if (event.type === 'document.versioned' || event.type === 'signature.completed') {
+    if (
+      event.type === 'document.versioned' ||
+      event.type === 'signature.completed' ||
+      event.type === 'document.replaced' // sommo-io fork: new bytes in place
+    ) {
       void refresh();
       return;
     }

@@ -153,6 +153,21 @@ describe('effects + capability wired together', () => {
     for (const pon of PONS) expect(h.capability.renderEpoch(pon)).toBe(1);
   });
 
+  // sommo-io fork: new bytes in place.
+  it('document.replaced makes the named pages stale, both products, and only them', () => {
+    const h = harness();
+    h.emit(event({ type: 'document.replaced', changedPageObjectNumbers: [22] }));
+    expect(h.capability.renderEpoch(22, false)).toBe(1);
+    expect(h.capability.renderEpoch(22, true)).toBe(1);
+    expect(h.capability.renderEpoch(11, false)).toBe(0);
+  });
+
+  it('document.replaced without a page list makes every page stale', () => {
+    const h = harness();
+    h.emit(event({ type: 'document.replaced', changedPageObjectNumbers: null }));
+    for (const pon of PONS) expect(h.capability.renderEpoch(pon, false)).toBe(1);
+  });
+
   it('teardown unsubscribes from the event stream', () => {
     const h = harness();
     h.teardown();
