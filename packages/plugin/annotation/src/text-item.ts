@@ -30,6 +30,7 @@ export function buildTextItems(m: Model, pon: number, view?: ViewEnv): TextItem[
     const doc = a ? richDocOf(a) : null;
     return {
       id: tb.id,
+      key: a?.cid ?? tb.id, // sommo-io fork
       ref: a?.ref ?? null,
       box: tb.box,
       contents: a?.data?.contents ?? '',

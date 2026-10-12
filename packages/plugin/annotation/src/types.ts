@@ -283,6 +283,9 @@ export type SelectionFlags = { [K in keyof AnnotationFlags]: boolean | null };
  */
 export interface TextItem {
   id: Id;
+  /** sommo-io fork: a render key that stays the same when a freshly drawn box
+   *  gets its durable id (`Annot.cid`), so its editor is not remounted. */
+  key: Id;
   ref: AnnotationRef | null;
   box: Rect;
   contents: string;
