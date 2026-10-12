@@ -28,6 +28,9 @@ jobs:
           --filter "@embedpdf/plugin-link..." --filter "@embedpdf/plugin-measurement..."
           --filter "@embedpdf/plugin-metadata..." --filter "@embedpdf/plugin-render..."
           --filter "@embedpdf/plugin-selection..." --filter "@embedpdf/plugin-signature..."
+          --filter "@embedpdf/react..."
+      # The engine bundles the PDFium wasm runtime, which the repository does not track.
+      - run: bash packages/engine/runtime/scripts/fetch-payload.sh wasm32
       - run: >-
           npx turbo run build
           --filter=@embedpdf/engine --filter=@embedpdf/core
@@ -36,6 +39,7 @@ jobs:
           --filter=@embedpdf/plugin-link --filter=@embedpdf/plugin-measurement
           --filter=@embedpdf/plugin-metadata --filter=@embedpdf/plugin-render
           --filter=@embedpdf/plugin-selection --filter=@embedpdf/plugin-signature
+          --filter=@embedpdf/react
       - run: node scripts/sommo-publish.mjs "${GITHUB_REF_NAME#sommo-v}" sommo-dist
       - run: gh release create "$GITHUB_REF_NAME" sommo-dist/*.tgz --title "$GITHUB_REF_NAME" --notes "Patched EmbedPDF packages (Apache-2.0, modified by sommo-io; see LICENSE and NOTICE in each tarball)."
         env:
