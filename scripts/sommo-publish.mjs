@@ -1,38 +1,59 @@
 #!/usr/bin/env node
-// sommo-io fork: publish our patched EmbedPDF packages to GitHub Packages.
+// sommo-io fork: pack our patched EmbedPDF packages as release tarballs.
 //
-//   node scripts/sommo-publish.mjs 3.0.0-next.14-sommo.1 [--dry-run]
+//   node scripts/sommo-publish.mjs 3.0.0-next.14-sommo.1 [out dir]
 //
 // Each package in PACKAGES is packed with pnpm (workspace: ranges and
-// publishConfig resolved as for npm), renamed to @sommo-io/embedpdf-<name>
-// at the given version and published to npm.pkg.github.com. pdf-editor
-// installs them through npm overrides
-// ("@embedpdf/engine-services": "npm:@sommo-io/embedpdf-engine-services@…").
-// Build the packages first (`npx turbo run build --filter=…`). Auth comes
-// from NODE_AUTH_TOKEN (a token with write:packages, or the workflow's
-// GITHUB_TOKEN). Each package also gets the repository's LICENSE and NOTICE.
+// publishConfig resolved as for npm), versioned <upstream>-sommo.<n> and
+// written to <out dir> (default: sommo-dist/) as
+// embedpdf-<name>-<version>.tgz. The workflow attaches them to the GitHub
+// Release of the tag; consumers install them by URL through npm overrides
+// ("@embedpdf/engine-core": "https://github.com/…/releases/download/…tgz").
+// Build the packages first (`npx turbo run build --filter=…`). Each tarball
+// also gets the repository's LICENSE and NOTICE (Apache-2.0 4(a), 4(d)).
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+// Every package with a "sommo-io fork" change.
 const PACKAGES = [
   'packages/engine/core',
   'packages/engine/main',
   'packages/engine/services',
+  'packages/core/main',
   'packages/core/annotation',
+  'packages/plugin/actions',
   'packages/plugin/annotation',
+  'packages/plugin/form',
+  'packages/plugin/link',
+  'packages/plugin/measurement',
+  'packages/plugin/metadata',
+  'packages/plugin/render',
+  'packages/plugin/selection',
+  'packages/plugin/signature',
+  'packages/plugin/stage',
 ];
-const REGISTRY = 'https://npm.pkg.github.com';
 
-const [version, ...flags] = process.argv.slice(2);
-const dryRun = flags.includes('--dry-run');
+const [version, outArg] = process.argv.slice(2);
 if (!/^\d+\.\d+\.\d+-[0-9A-Za-z.-]*sommo\.\d+$/.test(version ?? '')) {
-  console.error('Usage: node scripts/sommo-publish.mjs <upstream version>-sommo.<n> [--dry-run]');
+  console.error('Usage: node scripts/sommo-publish.mjs <upstream version>-sommo.<n> [out dir]');
   process.exit(1);
 }
 
 const root = resolve(import.meta.dirname, '..');
+const outDir = resolve(outArg ?? join(root, 'sommo-dist'));
+rmSync(outDir, { recursive: true, force: true });
+mkdirSync(outDir, { recursive: true });
+
 for (const dir of PACKAGES) {
   const pkgDir = join(root, dir);
   const upstream = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
@@ -41,30 +62,23 @@ for (const dir of PACKAGES) {
       `${upstream.name} is ${upstream.version}; the version must be ${upstream.version}-sommo.<n>`,
     );
   }
-  const out = mkdtempSync(join(tmpdir(), 'sommo-pack-'));
-  execFileSync('pnpm', ['pack', '--pack-destination', out], { cwd: pkgDir, stdio: 'inherit' });
-  const tarball = readdirSync(out).find((name) => name.endsWith('.tgz'));
-  execFileSync('tar', ['-xzf', join(out, tarball), '-C', out]);
-  const packed = join(out, 'package');
+  const work = mkdtempSync(join(tmpdir(), 'sommo-pack-'));
+  execFileSync('pnpm', ['pack', '--pack-destination', work], { cwd: pkgDir, stdio: 'inherit' });
+  const tarball = readdirSync(work).find((name) => name.endsWith('.tgz'));
+  execFileSync('tar', ['-xzf', join(work, tarball), '-C', work]);
+  const packed = join(work, 'package');
   const manifest = JSON.parse(readFileSync(join(packed, 'package.json'), 'utf8'));
-  const name = `@sommo-io/embedpdf-${upstream.name.replace(/^@embedpdf\//, '')}`;
-  manifest.name = name;
   manifest.version = version;
-  manifest.publishConfig = { registry: REGISTRY };
   manifest.repository = {
     type: 'git',
     url: 'git+https://github.com/sommo-io/embed-pdf-viewer.git',
     directory: dir,
   };
   writeFileSync(join(packed, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  // Apache-2.0 4(a) and 4(d): every published package carries the licence and
-  // the upstream NOTICE, whatever the package's own `files` list includes.
   copyFileSync(join(root, 'LICENSE'), join(packed, 'LICENSE'));
   copyFileSync(join(root, 'NOTICE'), join(packed, 'NOTICE'));
-  const args = ['publish', packed, '--registry', REGISTRY, '--tag', 'sommo'];
-  if (dryRun) args.push('--dry-run');
-  execFileSync('npm', args, { stdio: 'inherit' });
-  console.log(
-    `${dryRun ? 'would publish' : 'published'} ${name}@${version} (from ${upstream.name}@${upstream.version})`,
-  );
+  const file = `embedpdf-${upstream.name.replace(/^@embedpdf\//, '')}-${version}.tgz`;
+  execFileSync('tar', ['-czf', join(outDir, file), '-C', work, 'package']);
+  rmSync(work, { recursive: true, force: true });
+  console.log(`packed ${upstream.name}@${version} -> ${file}`);
 }
