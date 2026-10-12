@@ -1795,7 +1795,12 @@ function upsertAnnots(m: Model, annots: Annot[], bumpAp = false): Model {
     const prev = byId[a.id];
     // `apVersion` is model-owned, not DTO-derived: carry it across the replace,
     // +1 when this upsert confirms an engine re-bake with new raster content.
-    byId[a.id] = { ...a, apVersion: (prev?.apVersion ?? 0) + (bumpAp ? 1 : 0) };
+    // sommo-io fork: so is `cid` (the DTO knows nothing of the temp id).
+    byId[a.id] = {
+      ...a,
+      ...(prev?.cid !== undefined ? { cid: prev.cid } : {}),
+      apVersion: (prev?.apVersion ?? 0) + (bumpAp ? 1 : 0),
+    };
   }
   return { ...m, byId, order };
 }
