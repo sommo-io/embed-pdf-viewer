@@ -626,6 +626,10 @@ describe('annotation-core', () => {
       ref: { kind: 'objectNumber', pageObjectNumber: PON, annotObjectNumber: 42 },
     })[0];
     expect(m.byId[durableId]).toMatchObject({ id: durableId, cid: caretTemp });
+    // The engine's DTO for it (an upsert) keeps the cid.
+    const { cid: _cid, ...fromEngine } = m.byId[durableId]!;
+    m = update(m, { t: 'upsert', annots: [fromEngine] })[0];
+    expect(m.byId[durableId]?.cid).toBe(caretTemp);
   });
 
   it('an UNFILLED rect is hit only on its stroke; a filled one anywhere inside', () => {
