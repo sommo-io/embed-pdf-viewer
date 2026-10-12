@@ -231,6 +231,10 @@ export type AnnotationPropsPatch = {
 
 export interface Annot {
   id: Id;
+  /** sommo-io fork: the temp id it was drawn under, kept when `created` swaps
+   *  in the durable id, so a view can keep the same element (an editor the
+   *  user is already typing into) across the swap. Unset for loaded ones. */
+  cid?: Id;
   ref: AnnotationRef | null;
   pon: PageObjectNumber;
   subtype: Subtype;

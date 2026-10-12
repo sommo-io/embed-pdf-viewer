@@ -608,6 +608,26 @@ describe('annotation-core', () => {
     expect(m.selected).toEqual([durableId, strikeoutTemp]);
   });
 
+  // sommo-io fork
+  it('remembers the temp id as `cid` when a drawn annotation gets its durable id', () => {
+    const rect = { x: 20, y: 40, width: 80, height: 20 };
+    let m = update(initialModel, {
+      t: 'createReplaceText',
+      pon: PON,
+      quads: [textQuadFromRect(rect)],
+      anchor: { glyphQuad: textQuadFromRect(rect), advance: 1 },
+    })[0];
+    const [caretTemp] = m.order;
+    const durableId = `obj:${PON}:42`;
+    m = update(m, {
+      t: 'created',
+      tempId: caretTemp,
+      id: durableId,
+      ref: { kind: 'objectNumber', pageObjectNumber: PON, annotObjectNumber: 42 },
+    })[0];
+    expect(m.byId[durableId]).toMatchObject({ id: durableId, cid: caretTemp });
+  });
+
   it('an UNFILLED rect is hit only on its stroke; a filled one anywhere inside', () => {
     const r: Geom = {
       t: 'rect',

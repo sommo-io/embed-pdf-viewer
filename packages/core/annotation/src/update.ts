@@ -1842,7 +1842,8 @@ function reconcile(m: Model, tempId: Id, id: Id, ref: AnnotationRef): Model {
   const a = m.byId[tempId];
   if (!a) return m;
   const { [tempId]: _drop, ...rest } = m.byId;
-  const byId: Record<Id, Annot> = { ...rest, [id]: { ...a, id, ref } };
+  // sommo-io fork: `cid` remembers the temp id (see `Annot.cid`).
+  const byId: Record<Id, Annot> = { ...rest, [id]: { ...a, id, cid: a.cid ?? tempId, ref } };
   // Composite creations can relate another optimistic annotation to this temp
   // id. Keep the relationship coherent across the temp→durable id swap.
   for (const key of Object.keys(byId)) {

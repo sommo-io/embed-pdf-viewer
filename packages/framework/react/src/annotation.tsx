@@ -593,6 +593,10 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
   const binding = React.useRef<RichTextEditorBinding | null>(null);
   const latest = React.useRef({ item, scale });
   latest.current = { item, scale };
+  // sommo-io fork: text typed into a freshly drawn box before the engine has
+  // created it (no `ref` yet) waits here instead of being dropped; it is written
+  // once the ref arrives (the element is kept across that, see `TextItem.key`).
+  const pending = React.useRef<Parameters<RichTextEditorHost['onInput']>[0] | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -600,6 +604,7 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
       onInput: (doc) => {
         const it = latest.current.item;
         if (it.ref) anno.setRichText(it.ref, doc);
+        else pending.current = doc;
       },
       onSelectionChange: (range) => {
         const it = latest.current.item;
@@ -625,8 +630,17 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
   // differs, and otherwise just re-states the line model for the element's
   // (possibly restyled) font.
   useEffect(() => {
+    // sommo-io fork: while typed text waits for the ref, the element is ahead of
+    // the model; once the ref is there, the text goes to the model and comes back.
+    if (pending.current) {
+      if (!item.ref) return;
+      const doc = pending.current;
+      pending.current = null;
+      anno.setRichText(item.ref, doc);
+      return;
+    }
     binding.current?.update({ document: item.richText, scale });
-  }, [item, scale]);
+  }, [anno, item, scale]);
   // The element IS the engine's text PLATE (`SetPlateRect` + its `re W n`
   // clip): positioned at the padding inset with ZERO CSS padding, so the
   // scrollport's edge is the plate edge. CSS padding does NOT clip overflow —
@@ -921,7 +935,7 @@ export function AnnotationLayer({ renderers }: AnnotationLayerProps = {}) {
         return <React.Fragment key={item.id}>{out}</React.Fragment>;
       })}
       {texts.map((t) => (
-        <FreeText key={t.id} item={t} page={page} />
+        <FreeText key={t.key} item={t} page={page} />
       ))}
       <ToolGhostImage page={page} />
       <Chrome page={page} />

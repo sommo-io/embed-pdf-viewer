@@ -41,6 +41,7 @@ const PACKAGES = [
   'packages/plugin/selection',
   'packages/plugin/signature',
   'packages/plugin/stage',
+  'packages/framework/react',
 ];
 
 const [version, outArg] = process.argv.slice(2);
