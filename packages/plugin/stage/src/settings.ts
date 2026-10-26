@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 import { ZoomMode } from '@embedpdf/core-stage';
 import type { ResponsiveRule, StageSettings } from './types';
 
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: StageSettings = {
   columns: 'square',
   bounded: true,
   padding: 24,
+  paddingBottom: 0, // sommo-io fork
   gap: 16,
   pageFrame: { top: 0, right: 0, bottom: 0, left: 0 },
   direction: 'ltr',
@@ -76,6 +78,7 @@ export const SETTINGS_EFFECT: Record<keyof StageSettings, SettingEffect> = {
   columns: 'scene',
   bounded: 'reclamp',
   padding: 'reclamp',
+  paddingBottom: 'reclamp', // sommo-io fork
   gap: 'scene',
   pageFrame: 'scene',
   direction: 'scene',

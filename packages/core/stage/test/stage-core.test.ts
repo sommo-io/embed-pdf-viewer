@@ -208,6 +208,21 @@ describe('clampCamera', () => {
     expect(clamped.y).toBeGreaterThanOrEqual(0);
   });
 
+  // sommo-io fork
+  it('paddingBottom: the camera travels that much further down; top and x are as before', () => {
+    const bounds = { x: 0, y: 0, width: 1000, height: 5000 };
+    const plain = S.clampCamera({ x: 0, y: 99999, zoom: 1 }, bounds, vp, { bounded: true, padding: 24 });
+    const room = S.clampCamera({ x: 0, y: 99999, zoom: 1 }, bounds, vp, { bounded: true, padding: 24, paddingBottom: 200 });
+    expect(room.y - plain.y).toBeCloseTo(200, 6);
+    const topPlain = S.clampCamera({ x: 0, y: -99999, zoom: 1 }, bounds, vp, { bounded: true, padding: 24 });
+    const topRoom = S.clampCamera({ x: 0, y: -99999, zoom: 1 }, bounds, vp, { bounded: true, padding: 24, paddingBottom: 200 });
+    expect(topRoom.y).toBeCloseTo(topPlain.y, 6);
+    // The scroll range grows by the same amount, and a scroll to its end lands on the clamp's end.
+    const m = S.scrollMetrics(room, bounds, vp, 24, 200);
+    expect(m.scrollHeight - S.scrollMetrics(plain, bounds, vp, 24).scrollHeight).toBeCloseTo(200, 6);
+    expect(S.cameraFromScroll(room, bounds, vp, 24, { top: 1e9 }, 200).y).toBeCloseTo(room.y, 6);
+  });
+
   it('passes through untouched when unbounded', () => {
     const c = { x: 0, y: 99999, zoom: 1 };
     expect(

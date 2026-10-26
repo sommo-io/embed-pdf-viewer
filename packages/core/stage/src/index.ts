@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 /**
  * @embedpdf/core-stage — the pure spatial model.
  *
@@ -114,6 +115,13 @@ export interface CameraConstraint {
    * camera reveal exactly this much beyond each content edge.
    */
   padding: number;
+  /**
+   * sommo-io fork: extra room (screen px) past the content's BOTTOM only, on top
+   * of `padding` — for a panel that floats over the viewport's foot: the camera
+   * may travel that much further down, and content that fits rests in the part
+   * above it. Default 0 (upstream behaviour).
+   */
+  paddingBottom?: number;
   /** Where content RESTS on an axis it FITS (locked — there is nowhere else to
    *  be). Default center/center. x is logical against `direction`. */
   fitAlign?: Alignment;
@@ -248,8 +256,9 @@ export const clampCamera = (c: Camera, bounds: Rect, vp: Size, k: CameraConstrai
   if (!k.bounded) return c;
   const p = k.padding;
   const fit = k.fitAlign ?? { x: 'center', y: 'center' };
-  const axis = (pos: number, origin: number, content: number, view: number, a: Align): number => {
-    const t = travelRange(origin, content, view, c.zoom, p);
+  // sommo-io fork: `end` px at the axis' far side are covered (paddingBottom): the travel sees a shorter view.
+  const axis = (pos: number, origin: number, content: number, view: number, a: Align, end = 0): number => {
+    const t = travelRange(origin, content, Math.max(1, view - end), c.zoom, p);
     if (t.fits) return a === 'start' ? t.near : a === 'end' ? t.far : (t.near + t.far) / 2; // fits: rest & lock
     return clamp(pos, t.near, t.far);
   };
@@ -259,7 +268,7 @@ export const clampCamera = (c: Camera, bounds: Rect, vp: Size, k: CameraConstrai
   return {
     zoom: c.zoom,
     x: axis(c.x, bounds.x, bounds.width, vp.width, ax),
-    y: axis(c.y, bounds.y, bounds.height, vp.height, fit.y),
+    y: axis(c.y, bounds.y, bounds.height, vp.height, fit.y, Math.max(0, k.paddingBottom ?? 0)),
   };
 };
 
@@ -294,16 +303,18 @@ export const scrollMetrics = (
   bounds: Rect,
   vp: Size,
   padding: number,
+  /** sommo-io fork: the constraint's `paddingBottom` (extra room past the content's bottom). */
+  paddingBottom = 0,
 ): ScrollMetrics => {
-  const axis = (pos: number, origin: number, content: number, view: number) => {
+  const axis = (pos: number, origin: number, content: number, view: number, end = 0) => {
     const lo = Math.min(origin - padding / c.zoom, pos);
-    const hi = Math.max(origin + content + padding / c.zoom, pos + view / c.zoom);
+    const hi = Math.max(origin + content + (padding + end) / c.zoom, pos + view / c.zoom);
     const total = (hi - lo) * c.zoom;
     // half-px slack, like the fits-predicate: sub-pixel overflow must not flash a bar
     return { offset: (pos - lo) * c.zoom, total, scrollable: total > view + 0.5 };
   };
   const x = axis(c.x, bounds.x, bounds.width, vp.width);
-  const y = axis(c.y, bounds.y, bounds.height, vp.height);
+  const y = axis(c.y, bounds.y, bounds.height, vp.height, Math.max(0, paddingBottom));
   return {
     scrollLeft: x.offset,
     scrollTop: y.offset,
@@ -328,6 +339,8 @@ export const cameraFromScroll = (
   vp: Size,
   padding: number,
   target: { left?: number; top?: number },
+  /** sommo-io fork: the constraint's `paddingBottom` (extra room past the content's bottom). */
+  paddingBottom = 0,
 ): Camera => {
   const axis = (
     want: number | undefined,
@@ -335,17 +348,18 @@ export const cameraFromScroll = (
     origin: number,
     content: number,
     view: number,
+    end = 0,
   ): number => {
     if (want === undefined) return pos;
     const lo = Math.min(origin - padding / c.zoom, pos);
-    const hi = Math.max(origin + content + padding / c.zoom, pos + view / c.zoom);
+    const hi = Math.max(origin + content + (padding + end) / c.zoom, pos + view / c.zoom);
     const max = Math.max(0, (hi - lo) * c.zoom - view);
     return lo + clamp(want, 0, max) / c.zoom;
   };
   return {
     zoom: c.zoom,
     x: axis(target.left, c.x, bounds.x, bounds.width, vp.width),
-    y: axis(target.top, c.y, bounds.y, bounds.height, vp.height),
+    y: axis(target.top, c.y, bounds.y, bounds.height, vp.height, Math.max(0, paddingBottom)),
   };
 };
 

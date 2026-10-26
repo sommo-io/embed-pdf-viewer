@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 import { createCapabilityToken } from '@embedpdf/core';
 import type { PageObjectNumber } from '@embedpdf/core';
 import type { PageRotation, PageTransform, Rect } from '@embedpdf/core-geometry';
@@ -132,6 +133,13 @@ export interface StageSettings {
    * camera reveal exactly this much beyond each content edge.
    */
   padding: number;
+  /**
+   * sommo-io fork: extra room (screen px) past the content's BOTTOM only, on top
+   * of `padding` — for a panel that floats over the viewport's foot (a chat card):
+   * the camera travels that much further down, so the last page scrolls clear of
+   * it, and content that fits rests in the part above it. Default 0.
+   */
+  paddingBottom: number;
   /**
    * Space BETWEEN items — and between the halves of a spread. A number is world
    * units (scales with zoom — the canvas feel); `{ px }` is screen px (UI-stable
