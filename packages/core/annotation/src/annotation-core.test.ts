@@ -2613,6 +2613,35 @@ describe('annotation-core opaqueBody (stamp) gestures', () => {
     expect(Math.abs((item.apRot ?? 0) - 30)).toBeLessThan(1); // ...and spins live
   });
 
+  const liveRect = (m: Model) =>
+    m.draft?.g === 'handle' && m.draft.cur.t === 'rect' ? m.draft.cur.rect : null;
+
+  it('a corner drag keeps the aspect ratio; the axis moved further sets the scale', () => {
+    let m = run(loadStamp(), [editPtr('down', 150, 125), editPtr('up', 150, 125)]);
+    m = run(m, [editPtr('down', 200, 150), editPtr('move', 260, 160)]);
+    expect(liveRect(m)).toEqual({ x: 100, y: 100, width: 160, height: 80 });
+  });
+
+  it('a corner drag past the page edge stops the whole scale at the edge', () => {
+    const page = { x: 0, y: 0, width: 612, height: 180 };
+    const at = (phase: 'down' | 'move' | 'up', x: number, y: number): Msg => ({
+      t: 'editPointer',
+      phase,
+      in: { pon: PON, point: { x, y }, shift: false, pageBox: page },
+    });
+    let m = run(loadStamp(), [at('down', 150, 125), at('up', 150, 125)]);
+    // Off the bottom and far right: the bottom meets the page at y=180, and
+    // the width stops with it (160), instead of following the pointer to 400.
+    m = run(m, [at('down', 200, 150), at('move', 500, 400)]);
+    expect(liveRect(m)).toEqual({ x: 100, y: 100, width: 160, height: 80 });
+  });
+
+  it('an edge handle still resizes one side freely', () => {
+    let m = run(loadStamp(), [editPtr('down', 150, 125), editPtr('up', 150, 125)]);
+    m = run(m, [editPtr('down', 200, 125), editPtr('move', 260, 140)]);
+    expect(liveRect(m)).toEqual({ x: 100, y: 100, width: 160, height: 50 });
+  });
+
   it('a square mid-resize still flips to vector (unchanged behaviour)', () => {
     let m = run(initialModel, [
       createPtr('square', 'down', 100, 100),

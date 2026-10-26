@@ -1,3 +1,5 @@
+// Modified by sommo-io (2026): stamp corner resize keeps the aspect ratio and
+// stops at the page edge as a whole. Original work: EmbedPDF, Apache-2.0.
 import { annotationSelectionFrame } from './selection';
 /**
  * The pure annotation core: update(model, msg) → [model, effects].
@@ -54,6 +56,7 @@ import {
   rectFromPoints,
   rotatePoint,
   shapeRectFor,
+  stampDragHandle,
   transposedAboutCenter,
   unionRect,
   uprightAnchoredRect,
@@ -607,8 +610,15 @@ function editMove(m: Model, input: PointerInput): [Model, Effect[]] {
       { ...m, draft: { ...d, delta: { x: point.x - d.start.x, y: point.y - d.start.y } } },
       [],
     ];
-  if (d.g === 'handle')
-    return [{ ...m, draft: { ...d, cur: geomDragHandle(d.base, d.handle, point) } }, []];
+  if (d.g === 'handle') {
+    // Stamps keep their aspect on a corner drag (modified by sommo-io): the
+    // raw pointer, so the page clamp can stop the scale as a whole.
+    const cur =
+      m.byId[d.id]?.subtype === 'stamp'
+        ? stampDragHandle(d.base, d.handle, input.point, input.pageBox)
+        : geomDragHandle(d.base, d.handle, point);
+    return [{ ...m, draft: { ...d, cur } }, []];
+  }
   // Rotation reads the pointer as an ANGLE about the pivot — the raw point is
   // valid (and better) outside the page; the geometry itself never translates.
   // `free` (shift) records the snap bypass for this sample.
