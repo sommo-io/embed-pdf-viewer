@@ -31,6 +31,7 @@ const PACKAGES = [
   'packages/engine/services',
   'packages/core/main',
   'packages/core/annotation',
+  'packages/core/stage',
   'packages/plugin/actions',
   'packages/plugin/annotation',
   'packages/plugin/form',

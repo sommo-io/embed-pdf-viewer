@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 import * as S from '@embedpdf/core-stage';
 import {
   addRotations,
@@ -405,6 +406,7 @@ export function createStageCapability(
   const constraint = (): S.CameraConstraint => ({
     bounded: ctx.getState().bounded,
     padding: pad(),
+    paddingBottom: ctx.getState().paddingBottom, // sommo-io fork
     fitAlign: ctx.getState().fitAlign,
     direction: ctx.getState().direction,
   });
@@ -984,6 +986,7 @@ export function createStageCapability(
       sc.itemCount ? stayBounds() : { x: 0, y: 0, width: 0, height: 0 },
       vp(),
       pad(),
+      ctx.getState().paddingBottom, // sommo-io fork
     );
     const p = scrollMemo;
     if (
@@ -1283,7 +1286,7 @@ export function createStageCapability(
       cancelAnim();
       const sc = buildScene();
       if (!sc.itemCount) return;
-      const next = S.cameraFromScroll(cam(), stayBounds(), vp(), pad(), opts);
+      const next = S.cameraFromScroll(cam(), stayBounds(), vp(), pad(), opts, ctx.getState().paddingBottom); // sommo-io fork: paddingBottom
       if (opts.behavior === 'smooth') {
         animateTo(next, stayBounds(), 240, syncCursorFromCamera);
       } else {
