@@ -1,3 +1,5 @@
+// Modified by sommo-io (2026): stamp corner resize keeps the aspect ratio and
+// stops at the page edge as a whole. Original work: EmbedPDF, Apache-2.0.
 /**
  * Pure content-space geometry, dispatched on the `Geom` union. This is the whole
  * per-kind surface: bounds, hit-testing (stroke + fill, with a configurable
@@ -110,6 +112,48 @@ function resizeRect(base: Rect, h: RectHandle, to: Vec): Rect {
     height: Math.max(MIN_SIZE, Math.abs(b - t)),
   };
 }
+
+const isCornerHandle = (h: string): h is 'nw' | 'ne' | 'se' | 'sw' =>
+  h === 'nw' || h === 'ne' || h === 'se' || h === 'sw';
+
+/**
+ * Corner resize of an unrotated stamp, aspect ratio kept (modified by
+ * sommo-io). A stamp's picture is fitted inside its box, so a free-aspect box
+ * only adds empty margins around a smaller picture. The opposite corner stays
+ * put; the scale follows the pointer on the axis it moved further, and stops
+ * as a whole where the box meets `bounds` (the page) instead of one side
+ * stopping while the other keeps growing. Edge handles and rotated stamps
+ * keep the free resize.
+ */
+export function stampDragHandle(g: Geom, handle: string, to: Vec, bounds?: Rect): Geom {
+  if (g.t !== 'rect' || g.rot || !isCornerHandle(handle)) {
+    return geomDragHandle(g, handle, bounds ? clampToRect(to, bounds) : to);
+  }
+  const base = g.rect;
+  const e = rectEdges(handle);
+  const ax = e.w ? base.x + base.width : base.x;
+  const ay = e.n ? base.y + base.height : base.y;
+  const reachX = (e.w ? ax - to.x : to.x - ax) / base.width;
+  const reachY = (e.n ? ay - to.y : to.y - ay) / base.height;
+  let scale = Math.max(reachX, reachY);
+  if (bounds) {
+    const roomX = e.w ? ax - bounds.x : bounds.x + bounds.width - ax;
+    const roomY = e.n ? ay - bounds.y : bounds.y + bounds.height - ay;
+    scale = Math.min(scale, roomX / base.width, roomY / base.height);
+  }
+  scale = Math.max(scale, MIN_SIZE / Math.min(base.width, base.height));
+  const width = base.width * scale;
+  const height = base.height * scale;
+  return {
+    ...g,
+    rect: { x: e.w ? ax - width : ax, y: e.n ? ay - height : ay, width, height },
+  };
+}
+
+const clampToRect = (p: Vec, r: Rect): Vec => ({
+  x: Math.max(r.x, Math.min(r.x + r.width, p.x)),
+  y: Math.max(r.y, Math.min(r.y + r.height, p.y)),
+});
 
 /* ── small math ───────────────────────────────────────────────────────────── */
 
