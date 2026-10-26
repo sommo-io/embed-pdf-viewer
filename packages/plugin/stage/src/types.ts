@@ -135,7 +135,7 @@ export interface StageSettings {
   padding: number;
   /**
    * sommo-io fork: extra room (screen px) past the content's BOTTOM only, on top
-   * of `padding` — for a panel that floats over the viewport's foot (a chat card):
+   * of `padding` — for a panel that floats over the viewport's foot (a bottom sheet):
    * the camera travels that much further down, so the last page scrolls clear of
    * it, and content that fits rests in the part above it. Default 0.
    */
