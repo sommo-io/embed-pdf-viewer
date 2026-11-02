@@ -1,5 +1,6 @@
 // Modified by sommo-io (2026): stamp corner resize keeps the aspect ratio and
-// stops at the page edge as a whole. Original work: EmbedPDF, Apache-2.0.
+// stops at the page edge as a whole; a gesture keeps its target across the
+// temp→durable id swap. Original work: EmbedPDF, Apache-2.0.
 import { annotationSelectionFrame } from './selection';
 /**
  * The pure annotation core: update(model, msg) → [model, effects].
@@ -1878,5 +1879,22 @@ function reconcile(m: Model, tempId: Id, id: Id, ref: AnnotationRef): Model {
     selected: m.selected.map((x) => (x === tempId ? id : x)),
     // keep the just-drawn box in edit mode across the temp→durable id swap
     editing: m.editing === tempId ? id : m.editing,
+    // sommo-io fork: a gesture begun on the shape before the engine confirmed
+    // it (grab a just-drawn stroke) must follow the swap too, or every move
+    // of that gesture reads the gone temp id (`byId[tempId].geom`).
+    draft: draftWithId(m.draft, tempId, id),
   };
+}
+
+/** `draft` with `tempId` swapped for `id` in its `id`/`ids`, or `draft` itself when it names neither. */
+function draftWithId(draft: Model['draft'], tempId: Id, id: Id): Model['draft'] {
+  if (!draft) return draft;
+  const withIds = 'ids' in draft && Array.isArray(draft.ids) && draft.ids.includes(tempId);
+  const withId = 'id' in draft && draft.id === tempId;
+  if (!withIds && !withId) return draft;
+  return {
+    ...draft,
+    ...(withIds ? { ids: draft.ids.map((x: Id) => (x === tempId ? id : x)) } : {}),
+    ...(withId ? { id } : {}),
+  } as Model['draft'];
 }

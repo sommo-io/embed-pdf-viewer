@@ -632,6 +632,30 @@ describe('annotation-core', () => {
     expect(m.byId[durableId]?.cid).toBe(caretTemp);
   });
 
+  // sommo-io fork
+  it('a gesture begun on a just-drawn shape follows it when the shape gets its durable id', () => {
+    const rect = { x: 20, y: 40, width: 80, height: 20 };
+    let m = update(initialModel, {
+      t: 'createReplaceText',
+      pon: PON,
+      quads: [textQuadFromRect(rect)],
+      anchor: { glyphQuad: textQuadFromRect(rect), advance: 1 },
+    })[0];
+    const [caretTemp] = m.order;
+    // Grabbed before the engine confirmed it.
+    m = { ...m, draft: { g: 'move', ids: [caretTemp!], start: { x: 0, y: 0 }, delta: { x: 0, y: 0 }, guides: [] } };
+    const durableId = `obj:${PON}:42`;
+    m = update(m, {
+      t: 'created',
+      tempId: caretTemp!,
+      id: durableId,
+      ref: { kind: 'objectNumber', pageObjectNumber: PON, annotObjectNumber: 42 },
+    })[0];
+    expect(m.draft).toMatchObject({ g: 'move', ids: [durableId] });
+    // Every move of the gesture reads the shape by the draft's ids.
+    expect(() => computeMoveSnap(m, (m.draft as { ids: string[] }).ids, PON, { x: 5, y: 5 }, 4, { x: 0, y: 0, width: 600, height: 800 })).not.toThrow();
+  });
+
   it('an UNFILLED rect is hit only on its stroke; a filled one anywhere inside', () => {
     const r: Geom = {
       t: 'rect',
