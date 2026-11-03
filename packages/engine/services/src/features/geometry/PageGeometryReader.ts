@@ -1,4 +1,6 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 import type {
+  GeometryRunFont,
   PageGeometryGlyph,
   PageGeometryRun,
   PageGeometrySnapshot,
@@ -22,6 +24,7 @@ import {
   readI32,
   readRectF,
 } from '../../runtime/memory/structs';
+import { readUtf8String } from '../../runtime/memory/strings'; // sommo-io fork
 import { throwIfAborted } from '../../shared/abort';
 
 /**
@@ -41,6 +44,8 @@ export interface RawGeometryGlyphRecord {
   objectKey: number | bigint;
   /** Sampled at each text object's first glyph (run splits inherit it). */
   fontSize?: number;
+  /** sommo-io fork: sampled with `fontSize`. */
+  font?: GeometryRunFont;
   /**
    * Wire flags (bit 1 = space, bit 2 = empty). Synthesized-but-visible
    * glyphs (/ActualText pieces) stay 0, exactly like the legacy reader —
@@ -103,6 +108,7 @@ export class PageGeometryReader {
         const glyphCount = Math.max(fn.FPDFText_CountChars(textPagePtr), 0);
         const records: RawGeometryGlyphRecord[] = [];
         const geometryPtr = mem.alloc(EPDF_CHAR_GEOMETRY_LAYOUT.bytes);
+        const fontPtrs = [4, 4, 4, 4, 4, 24].map((bytes) => mem.alloc(bytes)); // sommo-io fork: font flags, R, G, B, A, char matrix
 
         try {
           let prevObjectKey: number | bigint | null = null;
@@ -115,12 +121,15 @@ export class PageGeometryReader {
             };
             if (objectKey !== prevObjectKey) {
               record.fontSize = fn.FPDFText_GetFontSize(textPagePtr, i);
+              const font = this.readFont(textPagePtr, i, fontPtrs); // sommo-io fork
+              if (font) record.font = font;
               prevObjectKey = objectKey;
             }
             records.push(record);
           }
         } finally {
           mem.free(geometryPtr);
+          for (const ptr of fontPtrs) mem.free(ptr); // sommo-io fork
         }
 
         return { runs: buildRunsFromRawGlyphs(records) };
@@ -132,11 +141,34 @@ export class PageGeometryReader {
     }
   }
 
+  /** sommo-io fork: the font of the glyph's text object (GeometryRunFont), or undefined without a name. */
+  private readFont(textPagePtr: Ptr, charIndex: number, [flags, r, g, b, a, matrix]: Ptr[]): GeometryRunFont | undefined {
+    const { fn, mem } = this.runtime;
+    const name = readUtf8String(mem, (buf, capacity) =>
+      fn.FPDFText_GetFontInfo(textPagePtr, charIndex, buf, capacity, flags),
+    );
+    if (!name) return undefined;
+    const font: GeometryRunFont = { name, flags: readI32(mem, flags) };
+    const weight = fn.FPDFText_GetFontWeight(textPagePtr, charIndex);
+    if (weight > 0) font.weight = weight;
+    // The em size on the page: Tf scaled by the char matrix (`Tf 1` with a `Tm` of 12 is 12 pt).
+    const em = fn.FPDFText_GetFontSize(textPagePtr, charIndex);
+    if (em > 0 && fn.FPDFText_GetMatrix(textPagePtr, charIndex, matrix)) {
+      const size = em * Math.hypot(readF32(mem, matrix, 8), readF32(mem, matrix, 12));
+      if (Number.isFinite(size) && size > 0) font.size = Math.round(size * 100) / 100;
+    }
+    if (fn.FPDFText_GetFillColor(textPagePtr, charIndex, r, g, b, a)) {
+      const hex = (ptr: Ptr) => (readI32(mem, ptr) & 0xff).toString(16).padStart(2, '0');
+      font.color = `#${hex(r)}${hex(g)}${hex(b)}`;
+    }
+    return font;
+  }
+
   private readGlyphRaw(
     textPagePtr: Ptr,
     charIndex: number,
     geometryPtr: Ptr,
-  ): Omit<RawGeometryGlyphRecord, 'objectKey' | 'fontSize'> {
+  ): Omit<RawGeometryGlyphRecord, 'objectKey' | 'fontSize' | 'font'> {
     const { fn, mem } = this.runtime;
     if (!fn.EPDFText_GetCharGeometry(textPagePtr, charIndex, geometryPtr)) {
       return emptyRawGlyph();
@@ -151,7 +183,7 @@ export class PageGeometryReader {
     }
 
     const upright = Boolean(native & bits.upright);
-    const raw: Omit<RawGeometryGlyphRecord, 'objectKey' | 'fontSize'> = {
+    const raw: Omit<RawGeometryGlyphRecord, 'objectKey' | 'fontSize' | 'font'> = {
       flags: native & bits.space ? 1 : 0,
       looseBox: normalizePdfRect(readRectF(mem, geometryPtr, offsets.looseBox)),
       upright,
@@ -198,12 +230,13 @@ export function buildRunsFromRawGlyphs(records: RawGeometryGlyphRecord[]): PageG
   let buffer: RawGeometryGlyphRecord[] = [];
   let charStart = 0;
   let fontSize: number | undefined;
+  let font: GeometryRunFont | undefined; // sommo-io fork
   let objectKey: number | bigint | null = null;
   let cls: RunClass | undefined;
 
   const flush = (nextStart: number) => {
     if (buffer.length > 0) {
-      runs.push(materializeRun(buffer, charStart, fontSize, cls));
+      runs.push(materializeRun(buffer, charStart, fontSize, cls, font));
       buffer = [];
       cls = undefined;
     }
@@ -216,6 +249,7 @@ export function buildRunsFromRawGlyphs(records: RawGeometryGlyphRecord[]): PageG
       flush(i);
       objectKey = record.objectKey;
       fontSize = record.fontSize;
+      font = record.font; // sommo-io fork
     }
     const recordClass = classOf(record);
     if (recordClass) {
@@ -248,6 +282,7 @@ function materializeRun(
   charStart: number,
   fontSize: number | undefined,
   cls: RunClass | undefined,
+  font?: GeometryRunFont, // sommo-io fork
 ): PageGeometryRun {
   if (cls && !cls.upright) {
     const glyphs: RotatedGeometryGlyph[] = buffer.map((g) =>
@@ -268,6 +303,7 @@ function materializeRun(
       rotation: cls.rotation,
       ascentFlip: cls.ascentFlip,
       ...(fontSize !== undefined ? { fontSize } : {}),
+      ...(font ? { font } : {}), // sommo-io fork
     };
   }
 
@@ -285,6 +321,7 @@ function materializeRun(
     charStart,
     glyphs,
     ...(fontSize !== undefined ? { fontSize } : {}),
+    ...(font ? { font } : {}), // sommo-io fork
   };
 }
 
@@ -312,7 +349,7 @@ function zeroQuad(): PdfQuad {
   return { p1: { x: 0, y: 0 }, p2: { x: 0, y: 0 }, p3: { x: 0, y: 0 }, p4: { x: 0, y: 0 } };
 }
 
-function emptyRawGlyph(): Omit<RawGeometryGlyphRecord, 'objectKey' | 'fontSize'> {
+function emptyRawGlyph(): Omit<RawGeometryGlyphRecord, 'objectKey' | 'fontSize' | 'font'> {
   return {
     flags: 2,
     looseBox: { left: 0, bottom: 0, right: 0, top: 0 },

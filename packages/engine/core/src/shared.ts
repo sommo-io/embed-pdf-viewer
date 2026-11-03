@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 /**
  * Zod-free shared domain surface.
  *
@@ -67,6 +68,7 @@ export {
 } from './geometry';
 export type { PageTextSnapshot } from './dto/PageTextSnapshot';
 export type {
+  GeometryRunFont, // sommo-io fork
   PageGeometryGlyph,
   PageGeometryRun,
   PageGeometrySnapshot,
