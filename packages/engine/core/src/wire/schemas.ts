@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 import { z } from 'zod';
 
 import type {
@@ -530,11 +531,21 @@ export const RotatedGeometryGlyphSchema = z.object({
   tightQuad: PdfQuadSchema.optional(),
 });
 
+// sommo-io fork: a run's font (GeometryRunFont).
+const GeometryRunFontSchema = z.object({
+  name: z.string(),
+  flags: z.number().int(),
+  weight: z.number().optional(),
+  size: z.number().optional(),
+  color: z.string().optional(),
+});
+
 export const UprightGeometryRunSchema = z.object({
   rect: PdfRectSchema,
   charStart: z.number().int().nonnegative(),
   glyphs: z.array(PageGeometryGlyphSchema),
   fontSize: z.number().optional(),
+  font: GeometryRunFontSchema.optional(), // sommo-io fork
 });
 
 export const RotatedGeometryRunSchema = z.object({
@@ -544,6 +555,7 @@ export const RotatedGeometryRunSchema = z.object({
   rotation: z.number(),
   ascentFlip: z.boolean(),
   fontSize: z.number().optional(),
+  font: GeometryRunFontSchema.optional(), // sommo-io fork
 });
 
 // Rotated first: in zod's default strip mode the upright shape would accept a

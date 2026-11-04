@@ -1,3 +1,4 @@
+// Modified by Sommo (sommo-io fork, Apache-2.0 section 4(b)); the changes are marked "sommo-io fork".
 import { pdfQuadBounds } from '../geometry/convert';
 import type { PdfQuad, PdfRect } from '../geometry/primitives';
 
@@ -41,6 +42,25 @@ export interface RotatedGeometryGlyph {
 }
 
 /**
+ * sommo-io fork: the font a run's text object draws with, sampled at its
+ * first glyph (PDFium `FPDFText_GetFontInfo`, `FPDFText_GetFontWeight`,
+ * `FPDFText_GetFillColor`, `FPDFText_GetMatrix`). Read-only, for a host matching new text to the
+ * page's own (a text box placed next to it takes its font and colour).
+ */
+export interface GeometryRunFont {
+  /** The font's /BaseFont, subset tag included (`ABCDEF+TimesNewRomanPSMT`). */
+  name: string;
+  /** The font descriptor's /Flags (bit 1 fixed pitch, 2 serif, 7 italic, 19 force bold). */
+  flags: number;
+  /** 100..900, when PDFium knows it. */
+  weight?: number;
+  /** The em size on the page in points (`fontSize` scaled by the char matrix), when known. */
+  size?: number;
+  /** Fill colour as `#rrggbb`, when PDFium knows it. */
+  color?: string;
+}
+
+/**
  * A run whose char matrix is upright — byte-identical to the wire shape that
  * predates orientation support, so upright documents never pay for it.
  */
@@ -49,6 +69,8 @@ export interface UprightGeometryRun {
   charStart: number;
   glyphs: PageGeometryGlyph[];
   fontSize?: number;
+  /** sommo-io fork: see {@link GeometryRunFont}. */
+  font?: GeometryRunFont;
 }
 
 /**
@@ -69,6 +91,8 @@ export interface RotatedGeometryRun {
   rotation: number;
   ascentFlip: boolean;
   fontSize?: number;
+  /** sommo-io fork: see {@link GeometryRunFont}. */
+  font?: GeometryRunFont;
 }
 
 /**
