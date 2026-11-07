@@ -233,6 +233,18 @@ describe('the property surface while editing', () => {
     });
   });
 
+  // sommo-io fork: strikethrough is the range's `line-through`, kept beside underline.
+  it('strikes a range through and keeps its underline', async () => {
+    const h = await loaded(freeTextDTO('hello'));
+    h.capability.beginTextEdit(REF);
+    h.capability.setRichText(REF, { paragraphs: [{ runs: [{ text: 'typed' }] }] });
+    h.capability.setTextSelection(REF, { start: 0, end: 5 });
+    h.capability.updateSelection({ underline: true });
+    h.capability.toggleTextFormat('strikethrough');
+    expect(h.capability.getSelectionProps().values.strikethrough).toBe(true);
+    expect(h.capability.getSelectionProps().values.underline).toBe(true);
+  });
+
   it('keeps non-text keys on the annotation and lands the text before them', async () => {
     const h = await loaded(freeTextDTO('hello'));
     h.capability.beginTextEdit(REF);

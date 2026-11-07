@@ -20,7 +20,7 @@ import {
   type TextStyle,
 } from '@embedpdf/core-annotation';
 
-import { richDocOf } from '../../rich-text';
+import { decorationOf, richDocOf } from '../../rich-text';
 import { boxEmit, type KindProjection, type Wire } from '../projection';
 import {
   colorToCss,
@@ -49,6 +49,8 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
     ...(body && body.weight >= 600 ? { bold: true } : {}),
     ...(body?.italic ? { italic: true } : {}),
     ...(body?.decoration.includes('underline') ? { underline: true } : {}),
+    // sommo-io fork: strikethrough is the body's `line-through`.
+    ...(body?.decoration.includes('line-through') ? { strikethrough: true } : {}),
   };
 }
 
@@ -68,7 +70,8 @@ const formattingBody = (a: Annot): Wire => {
         ...doc.body,
         weight: t?.bold ? 700 : 400,
         italic: !!t?.italic,
-        decoration: t?.underline ? ['underline'] : [],
+        // sommo-io fork: strikethrough joins underline in the decoration.
+        decoration: decorationOf(t),
       },
       paragraphs: doc.paragraphs,
     },
@@ -173,7 +176,12 @@ export const freeText: KindProjection = {
     if (cf) return { ...cf };
     return boxEmit(a, crop);
   },
-  prop: { bold: formattingBody, italic: formattingBody, underline: formattingBody },
+  prop: {
+    bold: formattingBody,
+    italic: formattingBody,
+    underline: formattingBody,
+    strikethrough: formattingBody,
+  },
   // `/IT` + the initial `/Contents` are create-only statements; while typing,
   // the debounced text-edit write owns `contents`.
   draftExtras: (a, crop) => ({

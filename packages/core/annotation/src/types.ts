@@ -169,13 +169,15 @@ export interface TextStyle {
   textAlign: TextAlign;
   /**
    * The rich body's formatting (free text only): bold = body weight ≥ 600,
-   * italic = the body face's italic, underline = the body's decoration.
+   * italic = the body face's italic, underline = the body's decoration
+   * (strikethrough: sommo-io fork, its `line-through`).
    * Absent = off. Runs override these as deltas (a bold word in a regular
    * box), which the plugin routes to the editor's text selection instead.
    */
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  strikethrough?: boolean;
 }
 
 /**

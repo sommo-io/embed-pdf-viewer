@@ -48,6 +48,7 @@ export const textStyleFromProps = (p: AnnotationProps): TextStyle => ({
   ...(p.bold !== undefined ? { bold: p.bold } : {}),
   ...(p.italic !== undefined ? { italic: p.italic } : {}),
   ...(p.underline !== undefined ? { underline: p.underline } : {}),
+  ...(p.strikethrough !== undefined ? { strikethrough: p.strikethrough } : {}),
 });
 
 /** Does this kind's prop table declare `link` (attachable link)? The link
@@ -95,6 +96,8 @@ export function readProp<K extends PropKey>(a: Annot, key: K): AnnotationProps[K
         return a.text ? (a.text.italic ?? false) : undefined;
       case 'underline':
         return a.text ? (a.text.underline ?? false) : undefined;
+      case 'strikethrough':
+        return a.text ? (a.text.strikethrough ?? false) : undefined;
       case 'icon':
         return a.icon;
       case 'link':
@@ -182,7 +185,7 @@ export function applyProps(a: Annot, patch: AnnotationPropsPatch): Annot | null 
       text.textAlign = patch.textAlign;
       textChanged = true;
     }
-    for (const key of ['bold', 'italic', 'underline'] as const) {
+    for (const key of ['bold', 'italic', 'underline', 'strikethrough'] as const) {
       const value = patch[key];
       if (value !== undefined && takes.has(key) && (text[key] ?? false) !== value) {
         text[key] = value;

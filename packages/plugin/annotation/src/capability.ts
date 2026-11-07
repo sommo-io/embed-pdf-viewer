@@ -1803,13 +1803,15 @@ export function createAnnotationCapability(
       // RUNS it covers (a delta over the body, through the pure run
       // algebra); whatever is left restyles the annotation as usual.
       const a = m.byId[range.id]!;
-      const { delta, rest } = runDeltaForProps(patch, fonts);
+      const doc = richDocOf(a, fonts);
+      // sommo-io fork: the range's lines, so one toggle keeps the other.
+      const lines = rangeProps(doc, range, fonts).values;
+      const { delta, rest } = runDeltaForProps(patch, fonts, {
+        underline: lines.underline === true,
+        strikethrough: lines.strikethrough === true,
+      });
       if (Object.keys(delta).length) {
-        const next = applyStyleToRange(
-          { paragraphs: richDocOf(a, fonts).paragraphs },
-          range,
-          delta,
-        );
+        const next = applyStyleToRange({ paragraphs: doc.paragraphs }, range, delta);
         apply({ t: 'setRichText', id: range.id, doc: next });
         if (a.ref) scheduleTextCommit(a.ref);
       }

@@ -306,7 +306,8 @@ export interface TextItem {
     /** The body's formatting (runs override it as inline spans). */
     fontWeight: number;
     fontStyle: 'normal' | 'italic';
-    textDecoration: 'none' | 'underline';
+    /** sommo-io fork: `underline`, `line-through`, both, or `none`. */
+    textDecoration: string;
     align: 'left' | 'center' | 'right';
     padding: number;
   };
