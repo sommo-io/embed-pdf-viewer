@@ -41,6 +41,7 @@ import {
   type DocumentVersionWorkerRequest,
   type DocumentReplaceWorkerRequest,
   type ExtensionCallWorkerRequest,
+  type DocumentRestoreLayerWorkerRequest,
   type DocumentProtection,
   type FontsRegisterWorkerRequest,
   type FontsAddFallbackWorkerRequest,
@@ -207,8 +208,12 @@ export interface WorkerExtensionResult {
 /**
  * sommo-io fork: host code that runs in the engine worker, on the engine's
  * own open documents (`DocumentHandle.callExtension`). Calls of one host run
- * one at a time; engine jobs may run while a call awaits. The engine counts
- * a call as a mutation (refused while a signing is pending).
+ * one at a time. A call is a job like any other: with the engine's default
+ * concurrency (1) no other job reaches the worker until it answers, so
+ * nothing closes or changes the document while it awaits. With a higher
+ * concurrency other jobs may run during an await, and a call must not use a
+ * pointer it held across one. The engine counts a call as a mutation
+ * (refused while a signing is pending).
  */
 export interface WorkerExtension {
   call(
@@ -308,7 +313,7 @@ export class WorkerHost {
     }
 
     // sommo-io fork: host extensions may await (font fetches); they run on
-    // their own chain, like the encoded kinds.
+    // their own chain, like the encoded kinds (see `WorkerExtension`).
     if (msg.kind === 'extension.call') {
       void this.receiveExtension(msg);
       return;
@@ -385,6 +390,9 @@ export class WorkerHost {
           break;
         case 'document.replace':
           resultPack = this.handleDocumentReplace(msg, ctrl.signal);
+          break;
+        case 'document.restoreLayer': // sommo-io fork
+          resultPack = this.handleDocumentRestoreLayer(msg);
           break;
         case 'signatures.prepare':
           resultPack = this.handleSignaturesPrepare(msg);
@@ -767,6 +775,48 @@ export class WorkerHost {
     if (req.password !== undefined) session.password = req.password;
     const layout = new PagesReader(this.runtime, session).read(signal);
     return wirePack({ tag: 'document.replace', layout });
+  }
+
+  /**
+   * sommo-io fork: put a layer artifact this session saved earlier back over
+   * its base, in place, the way `document.replace` installs new bytes: same
+   * session, every page re-pinned, `hasUnsavedEdits()` false (the loaded
+   * bytes are the base plus the restored delta, which is what a save of the
+   * document then writes). The base is retained from the registry, never
+   * parsed again. The artifact opens BEFORE anything is released: one saved
+   * over other base bytes (the runtime compares the base SHA-256) or a
+   * malformed one rejects with the document as it was. Not abortable once
+   * installed: the layout is read without the job's signal.
+   */
+  private handleDocumentRestoreLayer(
+    req: DocumentRestoreLayerWorkerRequest,
+  ): WirePack<WorkerResultPayload> {
+    const session = this.requireSession(req);
+    const base = session.kind === 'layer' ? session.source.base : null;
+    if (!base) {
+      throw new EngineError(
+        EngineErrorCode.InvalidArg,
+        'document has no layer to restore (opened without a layer)',
+      );
+    }
+    const acquired = this.baseDocuments.retainByKey(base.key);
+    if (!acquired) {
+      throw new EngineError(EngineErrorCode.InvalidArg, 'the document base is no longer registered');
+    }
+    // On failure the opener releases the retain it was given.
+    const handle = openLayerDocument(
+      this.runtime,
+      acquired,
+      { kind: 'artifact', bytes: new Uint8Array(req.artifact) },
+      session.password ?? null,
+    );
+    this.releaseExtensions(req.docId);
+    // Native models hold pointers into the document they were built on.
+    disposeFormModel(this.runtime, session);
+    disposeSignatureModel(this.runtime, session);
+    session.install(handle);
+    const layout = new PagesReader(this.runtime, session).read(new AbortController().signal);
+    return wirePack({ tag: 'document.restoreLayer', layout });
   }
 
   private handleDocumentVersion(req: DocumentVersionWorkerRequest): WirePack<WorkerResultPayload> {
@@ -2095,6 +2145,7 @@ const MUTATING_KINDS: ReadonlySet<WorkerRequest['kind']> = new Set<WorkerRequest
   'pages.insertBlank',
   'redaction.apply',
   'extension.call', // sommo-io fork
+  'document.restoreLayer', // sommo-io fork
   'attachments.create',
   'attachments.delete',
   'measure.setScale',

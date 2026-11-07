@@ -175,6 +175,47 @@ export class LocalDocumentHandle implements DocumentHandle {
   }
 
   /**
+   * sommo-io fork: put back a layer artifact this document saved earlier
+   * (`downloadLayer()`), in place (see `DocumentHandle.restoreLayer`). The
+   * artifact is copied: the caller keeps it, e.g. for a later redo.
+   */
+  restoreLayer(artifact: Uint8Array): AbortablePromise<DocumentReplaceResult> {
+    if (this.closed) {
+      return AbortablePromise.rejectReason(
+        new EngineError(EngineErrorCode.DocNotOpen, `document not open: ${this.id}`),
+      );
+    }
+    try {
+      // The same authority as `replace`: the document goes back to content it had.
+      this.guard.assertCapability('doc.open');
+    } catch (err) {
+      return AbortablePromise.rejectReason(err);
+    }
+    const docId = this.id;
+    const buffer = artifact.slice().buffer as ArrayBuffer;
+    const submission = this.queue.enqueue<WorkerResultPayload>(
+      {
+        buildPack: (jobId: JobId) =>
+          wirePack({ kind: 'document.restoreLayer', jobId, docId, artifact: buffer }, [buffer]),
+      },
+      { priority: Priority.HIGH },
+    );
+    return AbortablePromise.run<DocumentReplaceResult>(async (signal) => {
+      const onAbort = () => submission.abort(signal.reason);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      const payload = await submission;
+      if (payload.tag !== 'document.restoreLayer') {
+        throw new EngineError(EngineErrorCode.WireFormat, `unexpected payload tag: ${payload.tag}`);
+      }
+      // Any page may differ from the restored layer: every page is read again.
+      const result: DocumentReplaceResult = { layout: payload.layout, changedPageObjectNumbers: null };
+      this.publisher.publishLocal({ type: 'document.replaced', ...result });
+      return result;
+    });
+  }
+
+  /**
    * sommo-io fork: run a host extension in the engine worker against this
    * document (see `WorkerExtension` in engine-services).
    */

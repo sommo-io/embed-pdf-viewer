@@ -225,6 +225,19 @@ export interface DocumentReplaceWorkerRequest {
 }
 
 /**
+ * sommo-io fork: put a layer artifact this session saved earlier
+ * (`document.saveLayerBuffer`) back over the session's base, in place (same
+ * id; the base is shared, not parsed again). `artifact` is transferred.
+ */
+export interface DocumentRestoreLayerWorkerRequest {
+  kind: 'document.restoreLayer';
+  jobId: WorkerJobId;
+  docId: string;
+  layerName?: string;
+  artifact: ArrayBuffer;
+}
+
+/**
  * sommo-io fork: run an extension the host registered in the worker
  * (`WorkerHostOptions.extensions`) against this open document. `payload` is
  * opaque to the engine.
@@ -1198,6 +1211,7 @@ export type WorkerRequest =
   | SignaturesRevisionBytesWorkerRequest
   | DocumentVersionWorkerRequest
   | DocumentReplaceWorkerRequest
+  | DocumentRestoreLayerWorkerRequest // sommo-io fork
   | ExtensionCallWorkerRequest
   | SignaturesPrepareWorkerRequest
   | SignaturesCompleteWorkerRequest
@@ -1229,6 +1243,7 @@ export type WorkerResultPayload =
   | { tag: 'signatures.revisionBytes'; bytes: ArrayBuffer; size: number }
   | { tag: 'document.version'; version: BaseVersionInfo }
   | { tag: 'document.replace'; layout: PageListSnapshot }
+  | { tag: 'document.restoreLayer'; layout: PageListSnapshot } // sommo-io fork
   | { tag: 'extension.call'; result: unknown; changedPageObjectNumbers: PageObjectNumber[] }
   | { tag: 'signatures.prepare'; result: SignaturePrepared }
   | {
