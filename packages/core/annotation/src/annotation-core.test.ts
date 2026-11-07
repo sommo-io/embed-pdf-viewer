@@ -3133,6 +3133,16 @@ describe('page-bound rotate knob', () => {
     expect(placeRotateKnob(nearTop, K)).toEqual(rotateKnob(nearTop, K));
   });
 
+  it('placeRotateKnob: a negative offset hangs the knob under the shape, flipping to the top (sommo-io)', () => {
+    const fits = corners({ x: 100, y: 100, width: 100, height: 50 });
+    expect(placeRotateKnob(fits, -K, BOX)).toEqual({ at: { x: 150, y: 174 }, from: { x: 150, y: 150 } });
+    // the bottom stalk exits the page: hang off the TOP edge instead
+    const nearBottom = corners({ x: 100, y: 730, width: 100, height: 50 });
+    expect(placeRotateKnob(nearBottom, -K, BOX)).toEqual(rotateKnob(nearBottom, K));
+    // the hit test finds it where it is drawn
+    expect(placeRotateKnob(fits, -K, BOX).at.y).toBeGreaterThan(150);
+  });
+
   it('flips below a shape near the page top — and the flipped point IS the hit target', () => {
     const m = loadSelect({ x: 100, y: 10, width: 100, height: 50 });
     // unbounded placement would float above the page (the unreachable spot)

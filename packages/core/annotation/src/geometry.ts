@@ -1,5 +1,6 @@
 // Modified by sommo-io (2026): stamp corner resize keeps the aspect ratio and
-// stops at the page edge as a whole. Original work: EmbedPDF, Apache-2.0.
+// stops at the page edge as a whole; a negative knob offset puts the rotate knob
+// under the selection. Original work: EmbedPDF, Apache-2.0.
 /**
  * Pure content-space geometry, dispatched on the `Geom` union. This is the whole
  * per-kind surface: bounds, hit-testing (stroke + fill, with a configurable
@@ -638,8 +639,9 @@ export function chordThrough(box: Rect, p: Vec, angleDeg: number): { a: Vec; b: 
  * `rotateKnob` with a TOTAL page-bound placement policy: annotations, gestures
  * and chrome are all page-bound, so the grab dot must land inside `pageBox` —
  * off-page it is unreachable (the pointer dispatch resolves pages by
- * containment). Policy: top edge (the default) → FLIP to the bottom edge when
- * the stalk exits the page → CLAMP the top candidate inside (degenerate: the
+ * containment). Policy: top edge (the default; the bottom edge for a negative
+ * offset) → FLIP to the other edge when the stalk exits the page → CLAMP the
+ * first candidate inside (degenerate: the
  * selection spans ~the whole page; the knob may then overlap the shape, and
  * hit-testing checks it first so it stays grabbable). Both render (`chrome`)
  * and hit-test (`hitTest`) place the knob through THIS function, so what you
@@ -650,25 +652,29 @@ export function placeRotateKnob(
   offset: number,
   pageBox?: Rect,
 ): { at: Vec; from: Vec } {
-  const top = rotateKnob(corners, offset);
-  if (!pageBox || insideRect(pageBox, top.at)) return top;
-  // FLIP: the same outward-normal math off the OPPOSITE (bottom) edge. On a
-  // rotated OBB this exits through whichever page edge the stalk crossed.
+  // A negative offset (sommo-io) prefers the BOTTOM edge, flipping to the top.
+  const distance = Math.abs(offset);
+  const top = rotateKnob(corners, distance);
+  // The same outward-normal math off the OPPOSITE (bottom) edge. On a rotated
+  // OBB this exits through whichever page edge the stalk crossed.
   const [nw, , se, sw] = corners;
   const from = { x: (sw.x + se.x) / 2, y: (sw.y + se.y) / 2 };
   const down = { x: sw.x - nw.x, y: sw.y - nw.y };
   const len = Math.hypot(down.x, down.y) || 1;
-  const at = {
-    x: from.x + (down.x / len) * offset,
-    y: from.y + (down.y / len) * offset,
+  const bottom = {
+    at: { x: from.x + (down.x / len) * distance, y: from.y + (down.y / len) * distance },
+    from,
   };
-  if (insideRect(pageBox, at)) return { at, from };
+  const [first, flipped] = offset < 0 ? [bottom, top] : [top, bottom];
+  if (!pageBox || insideRect(pageBox, first.at)) return first;
+  // FLIP to the other edge when the stalk exits the page.
+  if (insideRect(pageBox, flipped.at)) return flipped;
   return {
     at: {
-      x: Math.min(Math.max(top.at.x, pageBox.x), pageBox.x + pageBox.width),
-      y: Math.min(Math.max(top.at.y, pageBox.y), pageBox.y + pageBox.height),
+      x: Math.min(Math.max(first.at.x, pageBox.x), pageBox.x + pageBox.width),
+      y: Math.min(Math.max(first.at.y, pageBox.y), pageBox.y + pageBox.height),
     },
-    from: top.from,
+    from: first.from,
   };
 }
 
