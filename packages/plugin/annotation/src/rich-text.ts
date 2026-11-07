@@ -32,7 +32,21 @@ import type {
   RichTextRunStyle,
 } from '@embedpdf/engine-core/runtime';
 
-export type TextFormat = 'bold' | 'italic' | 'underline';
+export type TextFormat = 'bold' | 'italic' | 'underline' | 'strikethrough';
+
+/**
+ * sommo-io fork: the decoration list the underline / strikethrough toggles
+ * mean (an absent toggle is off).
+ */
+export function decorationOf(t?: {
+  underline?: boolean;
+  strikethrough?: boolean;
+}): RichTextRunStyle['decoration'] {
+  return [
+    ...(t?.underline ? (['underline'] as const) : []),
+    ...(t?.strikethrough ? (['line-through'] as const) : []),
+  ];
+}
 
 /** The editor's selection inside one free-text annotation: flat offsets over
  *  the plain projection (paragraphs joined by `\r`). */
@@ -55,6 +69,7 @@ export const RANGE_KEYS: readonly PropKey[] = [
   'bold',
   'italic',
   'underline',
+  'strikethrough',
 ];
 
 // ---- Faces ---------------------------------------------------------------------
@@ -197,7 +212,7 @@ export function bodyFromTextStyle(t: TextStyle, fonts?: FontLookup): RichTextBod
     italic: t.italic ?? face.italic ?? false,
     size: t.fontSize,
     color: hex(t.fontColor),
-    decoration: t.underline ? ['underline'] : [],
+    decoration: decorationOf(t),
     script: 'normal',
     letterSpacing: 0,
     horizontalScale: 1,
@@ -272,6 +287,9 @@ export function stripBodyDefaults(
 export function runDeltaForProps(
   patch: AnnotationPropsPatch,
   fonts?: FontLookup,
+  /** sommo-io fork: the range's current underline / strikethrough, so one
+   *  toggle keeps the other line (a decoration delta replaces the list). */
+  current?: { underline?: boolean; strikethrough?: boolean },
 ): { delta: RichTextStyleDelta; rest: AnnotationPropsPatch } {
   const delta: RichTextStyleDelta = {};
   const rest: AnnotationPropsPatch = {};
@@ -299,7 +317,11 @@ export function runDeltaForProps(
         delta.italic = patch.italic;
         break;
       case 'underline':
-        delta.decoration = patch.underline ? ['underline'] : [];
+      case 'strikethrough':
+        delta.decoration = decorationOf({
+          underline: patch.underline ?? current?.underline,
+          strikethrough: patch.strikethrough ?? current?.strikethrough,
+        });
         break;
       default:
         (rest as Record<string, unknown>)[key] = value;
@@ -370,5 +392,6 @@ export function rangeProps(
   read('bold', (s) => (s.weight ?? 400) >= 600);
   read('italic', (s) => !!s.italic);
   read('underline', (s) => (s.decoration ?? []).includes('underline'));
+  read('strikethrough', (s) => (s.decoration ?? []).includes('line-through'));
   return { values, mixed };
 }

@@ -162,6 +162,17 @@ describe('props ↔ runs', () => {
       weight: 400,
       decoration: [],
     });
+    // sommo-io fork: one line toggle keeps the range's other line.
+    expect(runDeltaForProps({ strikethrough: true }, undefined, { underline: true }).delta).toEqual(
+      {
+        decoration: ['underline', 'line-through'],
+      },
+    );
+    expect(
+      runDeltaForProps({ underline: false }, undefined, { strikethrough: true }).delta,
+    ).toEqual({
+      decoration: ['line-through'],
+    });
   });
 
   it('reads a range back against the body: agreeing values, else mixed', () => {

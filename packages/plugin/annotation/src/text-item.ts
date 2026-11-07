@@ -49,7 +49,11 @@ export function buildTextItems(m: Model, pon: number, view?: ViewEnv): TextItem[
         color: t.fontColor,
         fontWeight: t.bold ? 700 : 400,
         fontStyle: t.italic ? 'italic' : 'normal',
-        textDecoration: t.underline ? 'underline' : 'none',
+        // sommo-io fork: strikethrough too.
+        textDecoration:
+          [t.underline ? 'underline' : '', t.strikethrough ? 'line-through' : '']
+            .filter(Boolean)
+            .join(' ') || 'none',
         align: t.textAlign,
         padding: textPlateInset(sw),
       },
