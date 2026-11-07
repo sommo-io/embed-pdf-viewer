@@ -868,75 +868,90 @@ export function AnnotationLayer({ renderers }: AnnotationLayerProps = {}) {
     };
   }, [anno, page.pon, bakeScale, bakedKey]);
 
+  // sommo-io fork: a free-text box's editable text paints in ITS OWN slot of the
+  // page's stacking order (right over its box's fill and border), not above every
+  // annotation. Upstream drew all the texts after all the items, so a text box
+  // under a shape still showed through it while a click (hit-testing walks the
+  // same `paintOrder` as `pageItems`) picked the shape. One flat keyed list:
+  // the text element keeps its key (and its focus) wherever it lands.
+  const textById = new Map(texts.map((t) => [t.id, t] as const));
+  const children: React.ReactNode[] = [];
+  const textElement = (t: TextItem) => <FreeText key={`text:${t.key}`} item={t} page={page} />;
+  items.forEach((item) => {
+    // The default visual: the engine's baked raster (blitted into the LIVE
+    // AP box — `apBox` follows a move) or the vector scene.
+    const baked = urls[item.id];
+    const native: React.ReactNode =
+      item.source === 'baked' ? (
+        baked ? (
+          <BakedImage
+            box={item.apBox ?? baked.box}
+            url={baked.url}
+            page={page}
+            blend={item.blend}
+            rot={item.apRot}
+          />
+        ) : null
+      ) : (
+        <Shape item={item} page={page} /> // shapes, cloudy, markup — all painted via scene()
+      );
+
+    // Ownership beats skin: an ENGAGED behavior's renderer is authoritative
+    // (form fill controls own their DOM); `for` rules apply only to
+    // plane-owned annotations and render pointer-locked — a skin can change
+    // pixels, never steal input.
+    const behavior = anno.behaviorFor({ subtype: item.subtype, ref: item.ref });
+    let out: React.ReactNode;
+    if (behavior) {
+      const entry = renderers?.find((r) => rendererBehaviorId(anno, r) === behavior.id);
+      if (entry) {
+        const Owner = entry.component;
+        out = (
+          <Owner
+            item={item}
+            page={page}
+            appearance={baked ?? null}
+            native={native}
+            interactive
+          />
+        );
+      } else {
+        out = null; // engaged but no renderer wired — the owner shows nothing
+      }
+    } else {
+      const entry = renderers?.find(
+        (r) => 'for' in r && r.for({ subtype: item.subtype, ref: item.ref }),
+      );
+      if (entry) {
+        const Skin = entry.component;
+        out = (
+          <div {...INERT} style={{ pointerEvents: 'none' }}>
+            <Skin
+              item={item}
+              page={page}
+              appearance={baked ?? null}
+              native={native}
+              interactive={false}
+            />
+          </div>
+        );
+      } else {
+        out = native;
+      }
+    }
+    children.push(<React.Fragment key={item.id}>{out}</React.Fragment>);
+    const text = textById.get(item.id);
+    if (text) {
+      textById.delete(item.id);
+      children.push(textElement(text));
+    }
+  });
+
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {items.map((item) => {
-        // The default visual: the engine's baked raster (blitted into the LIVE
-        // AP box — `apBox` follows a move) or the vector scene.
-        const baked = urls[item.id];
-        const native: React.ReactNode =
-          item.source === 'baked' ? (
-            baked ? (
-              <BakedImage
-                box={item.apBox ?? baked.box}
-                url={baked.url}
-                page={page}
-                blend={item.blend}
-                rot={item.apRot}
-              />
-            ) : null
-          ) : (
-            <Shape item={item} page={page} /> // shapes, cloudy, markup — all painted via scene()
-          );
-
-        // Ownership beats skin: an ENGAGED behavior's renderer is authoritative
-        // (form fill controls own their DOM); `for` rules apply only to
-        // plane-owned annotations and render pointer-locked — a skin can change
-        // pixels, never steal input.
-        const behavior = anno.behaviorFor({ subtype: item.subtype, ref: item.ref });
-        let out: React.ReactNode;
-        if (behavior) {
-          const entry = renderers?.find((r) => rendererBehaviorId(anno, r) === behavior.id);
-          if (entry) {
-            const Owner = entry.component;
-            out = (
-              <Owner
-                item={item}
-                page={page}
-                appearance={baked ?? null}
-                native={native}
-                interactive
-              />
-            );
-          } else {
-            out = null; // engaged but no renderer wired — the owner shows nothing
-          }
-        } else {
-          const entry = renderers?.find(
-            (r) => 'for' in r && r.for({ subtype: item.subtype, ref: item.ref }),
-          );
-          if (entry) {
-            const Skin = entry.component;
-            out = (
-              <div {...INERT} style={{ pointerEvents: 'none' }}>
-                <Skin
-                  item={item}
-                  page={page}
-                  appearance={baked ?? null}
-                  native={native}
-                  interactive={false}
-                />
-              </div>
-            );
-          } else {
-            out = native;
-          }
-        }
-        return <React.Fragment key={item.id}>{out}</React.Fragment>;
-      })}
-      {texts.map((t) => (
-        <FreeText key={t.key} item={t} page={page} />
-      ))}
+      {children}
+      {/* A text box the scene does not list (none today) still shows, on top as before. */}
+      {[...textById.values()].map(textElement)}
       <ToolGhostImage page={page} />
       <Chrome page={page} />
     </div>
