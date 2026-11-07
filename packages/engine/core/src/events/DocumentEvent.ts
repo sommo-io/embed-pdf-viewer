@@ -195,6 +195,16 @@ export type DocumentEvent =
     } & DocumentReplaceResult)
   | {
       /**
+       * sommo-io fork: a worker extension (`DocumentHandle.callExtension`)
+       * changed the content of these pages. Their rasters and text reads are
+       * stale; annotations and forms are untouched.
+       */
+      type: 'pages.contentChanged';
+      pageObjectNumbers: PageObjectNumber[];
+      origin: EventOrigin;
+    }
+  | {
+      /**
        * The session moved to a new saved version (a completed signature,
        * here or in another session). Byte-level facts — revisions,
        * coverage, digests, verdicts — must be re-read.

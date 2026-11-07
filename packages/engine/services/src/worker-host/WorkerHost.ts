@@ -40,6 +40,7 @@ import {
   type SignaturesRevisionBytesWorkerRequest,
   type DocumentVersionWorkerRequest,
   type DocumentReplaceWorkerRequest,
+  type ExtensionCallWorkerRequest,
   type DocumentProtection,
   type FontsRegisterWorkerRequest,
   type FontsAddFallbackWorkerRequest,
@@ -102,8 +103,8 @@ import {
   type WorkerResponse,
   type WorkerResultPayload,
 } from '@embedpdf/engine-core/runtime';
-import type { MutationMeta } from '@embedpdf/engine-core/runtime';
-import type { PdfRuntimeModule } from '@embedpdf/engine-runtime';
+import type { MutationMeta, PageObjectNumber } from '@embedpdf/engine-core/runtime';
+import type { PdfRuntimeModule, Ptr } from '@embedpdf/engine-runtime';
 
 import { DocumentSession } from '../document-session/DocumentSession';
 import { BaseDocumentRegistry } from '../document-session/lifecycle/BaseDocumentRegistry';
@@ -173,8 +174,55 @@ export interface WorkerImageEncoder {
   ): Promise<WorkerEncodedImage>;
 }
 
+/**
+ * sommo-io fork: what a {@link WorkerExtension} gets for one call: the
+ * runtime and the open document of the call's session, on this thread.
+ */
+export interface WorkerExtensionContext {
+  readonly runtime: PdfRuntimeModule;
+  readonly docId: string;
+  /** The session's open document (plain or layer); valid until `release`. */
+  readonly docPtr: Ptr;
+  /**
+   * Close the page the engine keeps loaded between reads. Call it before
+   * changing a page through pages of your own: the engine then parses the
+   * page again on its next read.
+   */
+  closeCachedPages(): void;
+}
+
+/** sommo-io fork: what a {@link WorkerExtension} call answers. */
+export interface WorkerExtensionResult {
+  result: unknown;
+  /** Buffers in `result` to move to the main thread. */
+  transfer?: ArrayBuffer[];
+  /**
+   * Page indices whose content the call wrote (`FPDFPage_GenerateContent`).
+   * The host notes the mutation (revisions, caches, the layer artifact) and
+   * the main thread emits `pages.contentChanged` for them.
+   */
+  changedPages?: number[];
+}
+
+/**
+ * sommo-io fork: host code that runs in the engine worker, on the engine's
+ * own open documents (`DocumentHandle.callExtension`). Calls of one host run
+ * one at a time; engine jobs may run while a call awaits. The engine counts
+ * a call as a mutation (refused while a signing is pending).
+ */
+export interface WorkerExtension {
+  call(
+    context: WorkerExtensionContext,
+    payload: unknown,
+  ): WorkerExtensionResult | Promise<WorkerExtensionResult>;
+  /** The document of `docId` is closing or about to read other bytes: drop every pointer into it. */
+  release?(docId: string): void;
+}
+
 export interface WorkerHostOptions {
   imageEncoder?: WorkerImageEncoder;
+  /** sommo-io fork: extensions by name, see {@link WorkerExtension}. */
+  extensions?: Readonly<Record<string, WorkerExtension>>;
   /**
    * Where a file-backed session (a file base) writes its signing candidate
    * between `prepare` and `complete`. Defaults to beside the base file
@@ -256,6 +304,13 @@ export class WorkerHost {
       msg.kind === 'annotations.renderAppearancesEncoded'
     ) {
       void this.receiveEncoded(msg);
+      return;
+    }
+
+    // sommo-io fork: host extensions may await (font fetches); they run on
+    // their own chain, like the encoded kinds.
+    if (msg.kind === 'extension.call') {
+      void this.receiveExtension(msg);
       return;
     }
 
@@ -702,6 +757,7 @@ export class WorkerHost {
   ): WirePack<WorkerResultPayload> {
     const session = this.requireSession(req);
     const password = req.password ?? session.password ?? null;
+    this.releaseExtensions(req.docId);
     // Native models hold pointers into the document they were built on.
     disposeFormModel(this.runtime, session);
     disposeSignatureModel(this.runtime, session);
@@ -737,6 +793,8 @@ export class WorkerHost {
     req: SignaturesCompleteWorkerRequest,
   ): WirePack<WorkerResultPayload> {
     const session = this.requireSession(req);
+    // sommo-io fork: completion installs the sealed document.
+    this.releaseExtensions(req.docId);
     const result = new SignatureMutator(
       this.runtime,
       session,
@@ -1653,6 +1711,7 @@ export class WorkerHost {
   }
 
   private handleClose(req: CloseWorkerRequest): WirePack<WorkerResultPayload> {
+    this.releaseExtensions(req.docId);
     for (const [key, session] of Array.from(this.sessions.entries())) {
       if (!sessionKeyBelongsToDoc(key, req.docId)) continue;
       disposeFormModel(this.runtime, session);
@@ -1666,6 +1725,7 @@ export class WorkerHost {
   private handleShutdown(_req: ShutdownWorkerRequest): WirePack<WorkerResultPayload> {
     if (!this.destroyed) {
       this.destroyed = true;
+      for (const key of this.sessions.keys()) this.releaseExtensions(key.split('::')[0]!);
       for (const session of this.sessions.values()) {
         disposeFormModel(this.runtime, session);
         disposeSignatureModel(this.runtime, session);
@@ -1676,6 +1736,72 @@ export class WorkerHost {
       destroyLibrary(this.runtime);
     }
     return wirePack({ tag: 'shutdown' });
+  }
+
+  /** sommo-io fork: extension calls of this host, one at a time. */
+  private extensionQueue: Promise<void> = Promise.resolve();
+
+  private receiveExtension(msg: ExtensionCallWorkerRequest): Promise<void> {
+    const run = async () => {
+      try {
+        this.assertNoPendingSigning(msg);
+        const extension = this.options.extensions?.[msg.name];
+        if (!extension) {
+          throw new EngineError(EngineErrorCode.NotImplemented, `no worker extension named ${msg.name}`);
+        }
+        const session = this.requireSession(msg);
+        const context: WorkerExtensionContext = {
+          runtime: this.runtime,
+          docId: msg.docId,
+          docPtr: session.requireDocPtr(),
+          closeCachedPages: () => session.pagePool().closeWarm(),
+        };
+        const answer = await extension.call(context, msg.payload);
+        // The document may have closed or changed while the call awaited.
+        const live = this.requireSession(msg);
+        const changed: PageObjectNumber[] = [];
+        for (const index of answer.changedPages ?? []) {
+          const pon = this.runtime.fn.EPDFDoc_GetPageObjectNumberByIndex(live.requireDocPtr(), index);
+          if (pon > 0 && !changed.includes(pon as PageObjectNumber)) changed.push(pon as PageObjectNumber);
+        }
+        let pack: WirePack<WorkerResultPayload>;
+        const payload: WorkerResultPayload = {
+          tag: 'extension.call',
+          result: answer.result,
+          changedPageObjectNumbers: changed,
+        };
+        if (changed.length) {
+          live.pagePool().closeWarm();
+          for (const pon of changed) live.bumpRevision(pon);
+          pack = this.finishMutation(live, payload);
+        } else {
+          pack = wirePack(payload);
+        }
+        this.post(
+          wirePack({ kind: 'resolve', jobId: msg.jobId, result: pack.payload }, [
+            ...pack.transfer,
+            ...(answer.transfer ?? []),
+          ]),
+        );
+      } catch (err) {
+        this.post(
+          wirePack({ kind: 'reject', jobId: msg.jobId, error: serializeError(err) }, EMPTY_TRANSFER),
+        );
+      }
+    };
+    this.extensionQueue = this.extensionQueue.then(run);
+    return this.extensionQueue;
+  }
+
+  /** sommo-io fork: extensions drop their pointers into a document before it closes or changes. */
+  private releaseExtensions(docId: string): void {
+    for (const extension of Object.values(this.options.extensions ?? {})) {
+      try {
+        extension.release?.(docId);
+      } catch {
+        // An extension that fails to clean up must not keep the document open.
+      }
+    }
   }
 
   private requireSession(req: { docId: string; layerName?: string }): DocumentSession {
@@ -1968,6 +2094,7 @@ const MUTATING_KINDS: ReadonlySet<WorkerRequest['kind']> = new Set<WorkerRequest
   'pages.insert',
   'pages.insertBlank',
   'redaction.apply',
+  'extension.call', // sommo-io fork
   'attachments.create',
   'attachments.delete',
   'measure.setScale',

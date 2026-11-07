@@ -168,6 +168,15 @@ describe('effects + capability wired together', () => {
     for (const pon of PONS) expect(h.capability.renderEpoch(pon, false)).toBe(1);
   });
 
+  // sommo-io fork: a worker extension wrote page content.
+  it('pages.contentChanged makes the named pages stale, both products, and only them', () => {
+    const h = harness();
+    h.emit(event({ type: 'pages.contentChanged', pageObjectNumbers: [22] }));
+    expect(h.capability.renderEpoch(22, false)).toBe(1);
+    expect(h.capability.renderEpoch(22, true)).toBe(1);
+    expect(h.capability.renderEpoch(11, false)).toBe(0);
+  });
+
   it('teardown unsubscribes from the event stream', () => {
     const h = harness();
     h.teardown();

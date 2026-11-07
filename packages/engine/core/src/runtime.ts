@@ -128,6 +128,7 @@ export type {
   SignaturesRevisionBytesWorkerRequest,
   DocumentVersionWorkerRequest,
   DocumentReplaceWorkerRequest,
+  ExtensionCallWorkerRequest, // sommo-io fork
   SignaturesPrepareWorkerRequest,
   SignaturesCompleteWorkerRequest,
   SignaturesAbortWorkerRequest,

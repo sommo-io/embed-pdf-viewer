@@ -578,6 +578,10 @@ export type {
   DocumentReplaceOptions,
   DocumentReplaceResult,
 } from './mutation/DocumentReplaceResult'; // sommo-io fork
+export type {
+  DocumentExtensionCallOptions,
+  DocumentExtensionResult,
+} from './mutation/DocumentExtensionResult'; // sommo-io fork
 export type { PageInsertResult } from './mutation/PageInsertResult';
 export type { PageInsertBlankSpec } from './mutation/PageInsertBlankInput';
 export { PAGE_INSERT_BLANK_MAX_COUNT } from './mutation/PageInsertBlankInput';

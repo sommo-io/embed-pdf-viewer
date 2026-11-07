@@ -20,6 +20,7 @@ import {
   type WorkerResultPayload,
 } from '@embedpdf/engine-core/runtime';
 import { createPdfRuntime, type CreatePdfRuntimeOptions } from '@embedpdf/engine-runtime';
+import type { WorkerHostOptions } from '@embedpdf/engine-services';
 
 import { LocalEngine, type LocalEngineOptions } from './LocalEngine';
 import type { LocalFontService } from './fonts/LocalFontService';
@@ -90,6 +91,8 @@ export type { ResolvedWasmSource, WasmSourceOptions, WorkerSource } from './wasm
 export interface CreateLocalEngineOptions extends Omit<LocalEngineOptions, 'transport'> {
   /** Forwarded to @embedpdf/engine-runtime when the runtime is created. */
   runtime?: CreatePdfRuntimeOptions;
+  /** sommo-io fork: host code run next to the documents (`DocumentHandle.callExtension`). */
+  extensions?: WorkerHostOptions['extensions'];
 }
 
 /**
@@ -101,7 +104,11 @@ export interface CreateLocalEngineOptions extends Omit<LocalEngineOptions, 'tran
  */
 export function createLocalEngine(opts: CreateLocalEngineOptions = {}): LocalEngine {
   const transport = new LazyTransport(
-    async () => new InlineTransport(await createPdfRuntime(opts.runtime ?? {})),
+    async () =>
+      new InlineTransport(
+        await createPdfRuntime(opts.runtime ?? {}),
+        opts.extensions ? { extensions: opts.extensions } : {},
+      ),
   );
   return LocalEngine.fromTransport({
     transport,

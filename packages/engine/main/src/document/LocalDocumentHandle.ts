@@ -2,6 +2,8 @@ import {
   type BaseVersionInfo,
   type DocumentReplaceOptions,
   type DocumentReplaceResult,
+  type DocumentExtensionCallOptions,
+  type DocumentExtensionResult,
   AbortablePromise,
   DEFAULT_PDF_SAVE_MODE,
   EngineError,
@@ -169,6 +171,50 @@ export class LocalDocumentHandle implements DocumentHandle {
       const result: DocumentReplaceResult = { layout: payload.layout, changedPageObjectNumbers };
       this.publisher.publishLocal({ type: 'document.replaced', ...result });
       return result;
+    });
+  }
+
+  /**
+   * sommo-io fork: run a host extension in the engine worker against this
+   * document (see `WorkerExtension` in engine-services).
+   */
+  callExtension<T = unknown>(
+    name: string,
+    payload: unknown,
+    options: DocumentExtensionCallOptions = {},
+  ): AbortablePromise<DocumentExtensionResult<T>> {
+    if (this.closed) {
+      return AbortablePromise.rejectReason(
+        new EngineError(EngineErrorCode.DocNotOpen, `document not open: ${this.id}`),
+      );
+    }
+    try {
+      this.guard.assertCapability('doc.pages.modify');
+    } catch (err) {
+      return AbortablePromise.rejectReason(err);
+    }
+    const docId = this.id;
+    const transfer = options.transfer ?? [];
+    const submission = this.queue.enqueue<WorkerResultPayload>(
+      {
+        buildPack: (jobId: JobId) =>
+          wirePack({ kind: 'extension.call', jobId, docId, name, payload }, transfer),
+      },
+      { priority: Priority.HIGH },
+    );
+    return AbortablePromise.run<DocumentExtensionResult<T>>(async (signal) => {
+      const onAbort = () => submission.abort(signal.reason);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      const payload = await submission;
+      if (payload.tag !== 'extension.call') {
+        throw new EngineError(EngineErrorCode.WireFormat, `unexpected payload tag: ${payload.tag}`);
+      }
+      const changed = payload.changedPageObjectNumbers;
+      if (changed.length) {
+        this.publisher.publishLocal({ type: 'pages.contentChanged', pageObjectNumbers: [...changed] });
+      }
+      return { result: payload.result as T, changedPageObjectNumbers: changed };
     });
   }
 

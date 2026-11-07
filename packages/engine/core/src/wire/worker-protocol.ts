@@ -224,6 +224,20 @@ export interface DocumentReplaceWorkerRequest {
   password?: string;
 }
 
+/**
+ * sommo-io fork: run an extension the host registered in the worker
+ * (`WorkerHostOptions.extensions`) against this open document. `payload` is
+ * opaque to the engine.
+ */
+export interface ExtensionCallWorkerRequest {
+  kind: 'extension.call';
+  jobId: WorkerJobId;
+  docId: string;
+  layerName?: string;
+  name: string;
+  payload: unknown;
+}
+
 export interface SignaturesPrepareWorkerRequest {
   kind: 'signatures.prepare';
   jobId: WorkerJobId;
@@ -1184,6 +1198,7 @@ export type WorkerRequest =
   | SignaturesRevisionBytesWorkerRequest
   | DocumentVersionWorkerRequest
   | DocumentReplaceWorkerRequest
+  | ExtensionCallWorkerRequest
   | SignaturesPrepareWorkerRequest
   | SignaturesCompleteWorkerRequest
   | SignaturesAbortWorkerRequest
@@ -1214,6 +1229,7 @@ export type WorkerResultPayload =
   | { tag: 'signatures.revisionBytes'; bytes: ArrayBuffer; size: number }
   | { tag: 'document.version'; version: BaseVersionInfo }
   | { tag: 'document.replace'; layout: PageListSnapshot }
+  | { tag: 'extension.call'; result: unknown; changedPageObjectNumbers: PageObjectNumber[] }
   | { tag: 'signatures.prepare'; result: SignaturePrepared }
   | {
       tag: 'signatures.complete';

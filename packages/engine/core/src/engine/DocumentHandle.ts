@@ -22,6 +22,10 @@ import type {
   DocumentReplaceResult,
 } from '../mutation/DocumentReplaceResult';
 import { AbortablePromise } from '../promise/AbortablePromise';
+import type {
+  DocumentExtensionCallOptions,
+  DocumentExtensionResult,
+} from '../mutation/DocumentExtensionResult'; // sommo-io fork
 
 export interface DocumentCapabilities {
   readonly weakAnnotationEditSessions: 'not-needed' | 'required';
@@ -147,5 +151,16 @@ export interface DocumentHandle {
     bytes: Uint8Array,
     options?: DocumentReplaceOptions,
   ): AbortablePromise<DocumentReplaceResult>;
+  /**
+   * sommo-io fork: run the extension the host registered under `name` in the
+   * engine worker (`WorkerHostOptions.extensions`) against this document.
+   * When the call changed page content, `pages.contentChanged` is emitted.
+   * Local engine only; rejects when no extension has that name.
+   */
+  callExtension?<T = unknown>(
+    name: string,
+    payload: unknown,
+    options?: DocumentExtensionCallOptions,
+  ): AbortablePromise<DocumentExtensionResult<T>>;
   close(): AbortablePromise<void>;
 }
