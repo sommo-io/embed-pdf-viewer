@@ -77,14 +77,15 @@ const freeTextDTO = (
   }) as unknown as AnnotationDTO;
 
 function harness() {
-  let state = initialAnnotationState();
+  let state: AnnotationState | undefined = initialAnnotationState();
   const update = vi.fn();
   const list = vi.fn();
+  const cleanups: (() => void)[] = [];
   const ctx = {
-    cleanup: () => {},
+    cleanup: (fn: () => void) => cleanups.push(fn),
     getState: () => state,
     dispatch: (action: AnnotationAction) => {
-      state = annotationReducer(state, action);
+      if (state) state = annotationReducer(state, action);
     },
     document: () => ({ pages: [{ pageObjectNumber: PON, boxes: { crop: CROP } }] }),
     doc: {
@@ -100,7 +101,12 @@ function harness() {
     engine: { fonts: { list: () => [] } },
     tryGet: () => null,
   } as unknown as PluginContext<AnnotationState, AnnotationAction>;
-  return { capability: createAnnotationCapability(ctx), update, list, state: () => state };
+  /** The document closes: its teardowns run and its state is gone, as the kernel does. */
+  const close = () => {
+    for (const fn of cleanups.splice(0).reverse()) fn();
+    state = undefined;
+  };
+  return { capability: createAnnotationCapability(ctx), update, list, state: () => state!, close };
 }
 
 async function loaded(dto: AnnotationDTO) {
@@ -261,5 +267,37 @@ describe('the property surface while editing', () => {
       text: 'typed',
       style: { decoration: ['underline'] },
     });
+  });
+});
+
+// sommo-io fork: the host closes the document (unmounts the viewer) right after
+// typing; what was still due must not run against the gone state.
+describe('the document closes', () => {
+  it('drops the pending text write: the debounce timer never fires', async () => {
+    const h = await loaded(freeTextDTO('hello'));
+    h.capability.beginTextEdit(REF);
+    h.capability.setRichText(REF, { paragraphs: [{ runs: [{ text: 'hello world' }] }] });
+    h.close();
+    expect(() => vi.advanceTimersByTime(300)).not.toThrow();
+    expect(h.update).not.toHaveBeenCalled();
+  });
+
+  it('a write the engine refuses after the close changes nothing', async () => {
+    const h = await loaded(freeTextDTO('hello'));
+    let refuse!: (reason: unknown) => void;
+    h.update.mockReturnValueOnce(new Promise((_, reject) => (refuse = reject)));
+    h.capability.select(REF);
+    h.capability.updateSelection({ opacity: 0.5 });
+    expect(h.update).toHaveBeenCalledTimes(1);
+    h.close();
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      refuse(new Error('document session not open'));
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 });

@@ -335,3 +335,33 @@ describe('render policy is a document FACT (Pattern A, like the page registry)',
     expect(kernel.getState().core.documents['b']!.renderPolicy).toEqual({ kind: 'continuous' });
   });
 });
+
+// sommo-io fork: a timer or engine reply that lands after its document closed
+// reads the plugin's last state (a late dispatch is already a no-op).
+describe('kernel: a document-scoped plugin after its document closed', () => {
+  it('reads its last state, never undefined, and a late dispatch changes nothing', async () => {
+    const { engine, resolve } = controllableEngine();
+    let ctx!: import('../src/types').PluginContext<{ n: number }, { type: 'inc' }>;
+    const counter: AnyPlugin = {
+      id: 'counter',
+      scope: 'document',
+      initialState: { n: 0 },
+      reduce: (state: { n: number }) => ({ n: state.n + 1 }),
+      init: (c) => {
+        ctx = c;
+      },
+    };
+    const kernel = createKernel({ engine, plugins: [counter] });
+    await kernel.start();
+    const open = kernel.documents.open(bytesInput('a'));
+    resolve('a');
+    await open;
+    ctx.dispatch({ type: 'inc' });
+    expect(ctx.getState()).toEqual({ n: 1 });
+
+    await kernel.documents.close('a');
+    expect(ctx.getState()).toEqual({ n: 1 });
+    ctx.dispatch({ type: 'inc' });
+    expect(ctx.getState()).toEqual({ n: 1 });
+  });
+});
