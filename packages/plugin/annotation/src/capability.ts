@@ -730,6 +730,9 @@ export function createAnnotationCapability(
         ...boxGeomFields(box, rotCW, crop),
         source,
         fit: 'contain',
+        // Print, like every other placement (`create`, icons, drawn tools):
+        // without /F 4 the stamp shows on screen but is left off paper.
+        flags: { print: true },
         ...(identity.name !== undefined ? { name: identity.name } : {}),
         ...(identity.subject !== undefined ? { subject: identity.subject } : {}),
       })
