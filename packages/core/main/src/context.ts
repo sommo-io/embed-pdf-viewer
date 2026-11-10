@@ -60,6 +60,7 @@ export function createPluginContext(
   const documentId = session?.id;
   const key = sliceKey(plugin.id, documentId);
   const ownScope = session?.scope ?? services.workspaceScope;
+  let lastState: unknown = store.getSlice(key);
   return {
     id: plugin.id,
     engine,
@@ -71,7 +72,14 @@ export function createPluginContext(
         : session
           ? session.handle
           : services.documentHandle(undefined),
-    getState: () => store.getSlice(key),
+    // sommo-io fork: a read after the slice is removed (a timer or engine reply
+    // landing after the document closed) sees the last state, as a late
+    // `dispatch` is already a no-op — never `undefined`.
+    getState: () => {
+      const state = store.getSlice(key);
+      if (state !== undefined) lastState = state;
+      return lastState;
+    },
     dispatch: (action: Action) => store.dispatchTo(key, action),
     subscribe: store.subscribe,
     core: store.getCore,

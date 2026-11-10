@@ -187,6 +187,15 @@ export function createAnnotationCapability(
 
   const model = (): Model => ctx.getState().model;
 
+  // sommo-io fork: the document closed (editor unmounted): pending text writes
+  // are dropped and late engine replies change nothing.
+  let closed = false;
+  ctx.cleanup(() => {
+    closed = true;
+    for (const timer of textTimers.values()) clearTimeout(timer);
+    textTimers.clear();
+  });
+
   // The E/X trigger feed (actions plugin present): driven ONLY from the
   // pointer-driven hoverAt diff below — see hover-feed.ts for the law.
   const actionsForHover = ctx.tryGet(PublicActionsToken);
@@ -721,6 +730,9 @@ export function createAnnotationCapability(
         ...boxGeomFields(box, rotCW, crop),
         source,
         fit: 'contain',
+        // sommo-io fork: print, like every other placement (`create`, icons, drawn tools):
+        // without /F 4 the stamp shows on screen but is left off paper.
+        flags: { print: true },
         ...(identity.name !== undefined ? { name: identity.name } : {}),
         ...(identity.subject !== undefined ? { subject: identity.subject } : {}),
       })
@@ -1004,6 +1016,7 @@ export function createAnnotationCapability(
       );
   };
   const scheduleTextCommit = (ref: AnnotationRef): void => {
+    if (closed) return;
     const key = refKey(ref);
     clearTimeout(textTimers.get(key));
     textTimers.set(
@@ -1023,6 +1036,7 @@ export function createAnnotationCapability(
   };
 
   function apply(msg: Msg): void {
+    if (closed) return;
     const [next, effects] = update(model(), msg);
     ctx.dispatch({ type: 'SET_MODEL', model: next });
     for (const fx of effects) perform(fx, next);

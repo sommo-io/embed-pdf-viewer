@@ -270,6 +270,45 @@ describe('annotation flags', () => {
     } as Parameters<typeof h.capability.create>[1]);
     expect(h.create.mock.calls[0]![0]).toMatchObject({ flags: { print: true } });
   });
+
+  // A 1×1 PNG: the signature and IHDR are all the stamp sniffer reads.
+  const PNG = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1,
+    0, 0, 0, 1, 8, 6, 0, 0, 0,
+  ]);
+  const stampDTO = (n: number): AnnotationDTO =>
+    ({
+      ...base(n),
+      subtype: 'stamp',
+      rect: { left: 100, bottom: 100, right: 150, top: 150 },
+    }) as unknown as AnnotationDTO;
+
+  it('a placed stamp (image, signature) is created with /F print', async () => {
+    const h = harness();
+    h.create.mockResolvedValueOnce({ created: stampDTO(25) });
+    await h.capability.placeStamp(
+      { source: PNG, targetWidth: 50, name: 'pdfeditor.image' },
+      { pageObjectNumber: PON, at: { x: 125, y: 125 } },
+    );
+    expect(h.create.mock.calls[0]![0]).toMatchObject({
+      subtype: 'stamp',
+      name: 'pdfeditor.image',
+      flags: { print: true },
+    });
+  });
+
+  it('an armed stamp placed by a click (marks) is created with /F print', async () => {
+    const h = harness();
+    h.create.mockResolvedValueOnce({ created: stampDTO(26) });
+    await h.capability.armStamp({ source: PNG, targetWidth: 20, name: 'pdfeditor-check-16181d' });
+    expect(h.capability.placeArmedStamp(PON, { x: 125, y: 125 })).toBe(true);
+    await vi.waitFor(() => expect(h.create).toHaveBeenCalledTimes(1));
+    expect(h.create.mock.calls[0]![0]).toMatchObject({
+      subtype: 'stamp',
+      name: 'pdfeditor-check-16181d',
+      flags: { print: true },
+    });
+  });
 });
 
 describe('claimsTouchAt (touch consent)', () => {
