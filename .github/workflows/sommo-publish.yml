@@ -1,20 +1,64 @@
 # sommo-io fork: pack our patched packages (scripts/sommo-publish.mjs) and
-# attach them to a GitHub Release. Push a tag `sommo-v<version>`, for example
-# `sommo-v3.0.0-next.14-sommo.1`. Upstream's release workflow only runs on main.
+# attach them to a GitHub Release. Either push a tag `sommo-v<version>`, for
+# example `sommo-v3.0.0-next.14-sommo.1`, or run the workflow by hand with the
+# commit and the release number:
+#
+#   gh workflow run sommo-publish.yml -R sommo-io/embed-pdf-viewer \
+#     --ref sommo/next.14 -f sha=<full commit sha> -f n=<number>
+#
+# A manual run builds that commit and creates the tag on it.
+# Upstream's release workflow only runs on main.
 name: Release sommo-io packages
 
 on:
   push:
     tags: ['sommo-v*']
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit sha to build and tag
+        required: true
+      n:
+        description: Release number N (tag sommo-v<upstream>-sommo.N)
+        required: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: sommo-release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.ref }}
+      - name: Resolve tag and commit
+        id: tag
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_N: ${{ inputs.n }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character commit sha"; exit 1; }
+            [[ "$INPUT_N" =~ ^[0-9]+$ ]] || { echo "n must be a number"; exit 1; }
+            [ "$(git rev-parse HEAD)" = "$INPUT_SHA" ] || { echo "checkout is not $INPUT_SHA"; exit 1; }
+            upstream=$(node -p "require('./packages/engine/main/package.json').version")
+            tag="sommo-v${upstream}-sommo.${INPUT_N}"
+            if gh release view "$tag" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+              echo "$tag already exists"; exit 1
+            fi
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#sommo-v}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Release $tag at $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -40,7 +84,20 @@ jobs:
           --filter=@embedpdf/plugin-metadata --filter=@embedpdf/plugin-render
           --filter=@embedpdf/plugin-selection --filter=@embedpdf/plugin-signature
           --filter=@embedpdf/react
-      - run: node scripts/sommo-publish.mjs "${GITHUB_REF_NAME#sommo-v}" sommo-dist
-      - run: gh release create "$GITHUB_REF_NAME" sommo-dist/*.tgz --title "$GITHUB_REF_NAME" --notes "Patched EmbedPDF packages (Apache-2.0, modified by sommo-io; see LICENSE and NOTICE in each tarball)."
+      - run: node scripts/sommo-publish.mjs "${{ steps.tag.outputs.version }}" sommo-dist
+      - name: Check the tarballs
+        run: |
+          count=$(ls sommo-dist/*.tgz | wc -l)
+          echo "$count tarballs"
+          [ "$count" -gt 0 ] || exit 1
+          for f in sommo-dist/*.tgz; do
+            tar -tzf "$f" | grep -qx 'package/LICENSE' || { echo "$f: no LICENSE"; exit 1; }
+            tar -tzf "$f" | grep -qx 'package/NOTICE' || { echo "$f: no NOTICE"; exit 1; }
+          done
+      - run: >-
+          gh release create "${{ steps.tag.outputs.tag }}" sommo-dist/*.tgz
+          --target "${{ steps.tag.outputs.sha }}"
+          --title "${{ steps.tag.outputs.tag }}"
+          --notes "Patched EmbedPDF packages (Apache-2.0, modified by sommo-io; see LICENSE and NOTICE in each tarball)."
         env:
           GH_TOKEN: ${{ github.token }}
