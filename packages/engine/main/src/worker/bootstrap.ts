@@ -20,7 +20,7 @@
  * so the main thread may post `init` immediately after `new Worker(...)`.
  */
 import type { WirePack, WorkerResponse } from '@embedpdf/engine-core/runtime';
-import { WorkerHost } from '@embedpdf/engine-services';
+import { WorkerHost, type WorkerHostOptions } from '@embedpdf/engine-services';
 import { createPdfRuntime } from '@embedpdf/engine-runtime';
 
 import type { WorkerRequest } from './protocol';
@@ -40,15 +40,23 @@ export interface EngineWorkerInit {
  * wait for the init message, boot the runtime with the wasm source it
  * carries, then post `{ kind: 'ready' }` (or `{ kind: 'init-error' }`).
  */
-export function startEngineWorker(scope: DedicatedWorkerGlobalScope): void {
+export function startEngineWorker(
+  scope: DedicatedWorkerGlobalScope,
+  /** sommo-io fork: host options, e.g. `extensions` (see `WorkerExtension`). */
+  options: WorkerHostOptions = {},
+): void {
   scope.onmessage = (event: MessageEvent) => {
     const data = event.data as EngineWorkerInit | undefined;
     if (!data || typeof data !== 'object' || data.kind !== 'init') return;
-    boot(scope, data);
+    boot(scope, data, options);
   };
 }
 
-function boot(scope: DedicatedWorkerGlobalScope, init: EngineWorkerInit): void {
+function boot(
+  scope: DedicatedWorkerGlobalScope,
+  init: EngineWorkerInit,
+  options: WorkerHostOptions,
+): void {
   (async () => {
     const source = resolveBootSource(init);
     const runtime = await createPdfRuntime({
@@ -62,7 +70,7 @@ function boot(scope: DedicatedWorkerGlobalScope, init: EngineWorkerInit): void {
     // move zero-copy back to the main thread.
     const host = new WorkerHost(runtime, (pack: WirePack<WorkerResponse>) => {
       scope.postMessage(pack.payload, pack.transfer as Transferable[]);
-    });
+    }, options);
 
     scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
       host.receive(event.data);

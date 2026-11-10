@@ -70,4 +70,7 @@ export {
   type WorkerEncodedImage,
   type WorkerHostOptions,
   type WorkerImageEncoder,
+  type WorkerExtension, // sommo-io fork
+  type WorkerExtensionContext,
+  type WorkerExtensionResult,
 } from './worker-host/WorkerHost';

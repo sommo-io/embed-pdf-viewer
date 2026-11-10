@@ -77,6 +77,12 @@ export function registerRenderEffects(ctx: EffectContext<RenderState, RenderActi
       if (pons.length) ctx.dispatch({ type: 'INVALIDATE', scope: 'content', pons });
       return;
     }
+    // sommo-io fork: a worker extension wrote these pages' content.
+    if (event.type === 'pages.contentChanged') {
+      if (event.pageObjectNumbers.length)
+        ctx.dispatch({ type: 'INVALIDATE', scope: 'content', pons: event.pageObjectNumbers });
+      return;
+    }
     if (event.type === 'redaction.applied') {
       const pons = event.results
         .filter((r) => r.status === 'applied')

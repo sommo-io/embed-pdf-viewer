@@ -19,6 +19,11 @@
       "import": "./dist/portable.js",
       "require": "./dist/portable.cjs"
     },
+    "./worker-bootstrap": {
+      "development": "./src/worker/bootstrap.ts",
+      "import": "./dist/worker-bootstrap.js",
+      "require": "./dist/worker-bootstrap.cjs"
+    },
     "./package.json": "./package.json",
     "./worker-entry": "./src/worker/worker-entry.ts",
     "./worker-source": {
@@ -83,6 +88,10 @@
       "./portable": {
         "import": "./dist/portable.js",
         "require": "./dist/portable.cjs"
+      },
+      "./worker-bootstrap": {
+        "import": "./dist/worker-bootstrap.js",
+        "require": "./dist/worker-bootstrap.cjs"
       },
       "./package.json": "./package.json",
       "./worker-entry": "./src/worker/worker-entry.ts",

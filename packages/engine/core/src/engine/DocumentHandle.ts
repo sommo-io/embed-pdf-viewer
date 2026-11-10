@@ -22,6 +22,10 @@ import type {
   DocumentReplaceResult,
 } from '../mutation/DocumentReplaceResult';
 import { AbortablePromise } from '../promise/AbortablePromise';
+import type {
+  DocumentExtensionCallOptions,
+  DocumentExtensionResult,
+} from '../mutation/DocumentExtensionResult'; // sommo-io fork
 
 export interface DocumentCapabilities {
   readonly weakAnnotationEditSessions: 'not-needed' | 'required';
@@ -147,5 +151,29 @@ export interface DocumentHandle {
     bytes: Uint8Array,
     options?: DocumentReplaceOptions,
   ): AbortablePromise<DocumentReplaceResult>;
+  /**
+   * sommo-io fork: put back a layer this document saved earlier with
+   * `downloadLayer()`, in place: the document becomes exactly what it was
+   * when the artifact was saved. Its base is shared, never parsed again, so
+   * this costs what the layer costs, not what the file costs. The handle and
+   * everything bound to it stay, and `document.replaced` is emitted with every
+   * page as changed (`changedPageObjectNumbers: null`). Rejects,
+   * leaving the document as it was, on a session without a layer
+   * (`sessionKind: 'plain'`), on an artifact saved over other base bytes or
+   * a malformed one, and while a signing is pending. Local engine only; the
+   * caller keeps `artifact` (it is copied).
+   */
+  restoreLayer?(artifact: Uint8Array): AbortablePromise<DocumentReplaceResult>;
+  /**
+   * sommo-io fork: run the extension the host registered under `name` in the
+   * engine worker (`WorkerHostOptions.extensions`) against this document.
+   * When the call changed page content, `pages.contentChanged` is emitted.
+   * Local engine only; rejects when no extension has that name.
+   */
+  callExtension?<T = unknown>(
+    name: string,
+    payload: unknown,
+    options?: DocumentExtensionCallOptions,
+  ): AbortablePromise<DocumentExtensionResult<T>>;
   close(): AbortablePromise<void>;
 }

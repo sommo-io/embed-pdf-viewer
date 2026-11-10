@@ -464,7 +464,8 @@ export function createSelectionCapability(
     if (
       event.type === 'redaction.applied' ||
       event.type === 'pages.flattened' ||
-      event.type === 'document.replaced' // sommo-io fork: new bytes in place
+      event.type === 'document.replaced' || // sommo-io fork: new bytes in place
+      event.type === 'pages.contentChanged' // sommo-io fork: an extension wrote page content
     ) {
       invalidateContent();
     }
