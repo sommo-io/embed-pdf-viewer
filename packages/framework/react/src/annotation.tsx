@@ -394,6 +394,8 @@ function Chrome({ page }: { page: PageContextValue }) {
   const haloAt = cs.outline.width / 2 + halo / 2;
   const boxFill = (subtype?: string) => (subtype && cs.outline.fill?.[subtype]) || 'none';
   const radius = cs.outline.radius ?? 0;
+  // sommo-io fork: the outline drawn this far outside the box (px), by subtype.
+  const boxOffset = (subtype?: string) => (subtype && cs.outline.offset?.[subtype]) || 0;
   // The live rotation readout — an HTML chip (rounded box + padded text beats
   // hand-rolling it in SVG), riding the pointer like v2's.
   const chip = nodes.find((n) => n.kind === 'angle-chip');
@@ -462,10 +464,21 @@ function Chrome({ page }: { page: PageContextValue }) {
           // An oriented selection box (a tilted shape/group): a closed quad through
           // the four content-space corners — replaces the axis-aligned outline.
           if (n.kind === 'obb') {
-            const pts = n.corners
-              .map((c) => {
-                const p = page.transform.toPixels(c);
-                return `${p.x},${p.y}`;
+            const px = n.corners.map((c) => page.transform.toPixels(c));
+            const off = boxOffset(n.subtype);
+            // Each corner pushed `off` px out along both of its edges.
+            const unit = (x: number, y: number) => {
+              const l = Math.hypot(x, y) || 1;
+              return { x: x / l, y: y / l };
+            };
+            const pts = px
+              .map((p, k) => {
+                if (!off) return `${p.x},${p.y}`;
+                const prev = px[(k + 3) % 4];
+                const next = px[(k + 1) % 4];
+                const a = unit(p.x - prev.x, p.y - prev.y);
+                const c = unit(p.x - next.x, p.y - next.y);
+                return `${p.x + off * (a.x + c.x)},${p.y + off * (a.y + c.y)}`;
               })
               .join(' ');
             return (
@@ -583,13 +596,20 @@ function Chrome({ page }: { page: PageContextValue }) {
               />
             );
           }
+          const off = boxOffset(n.subtype);
+          const o = {
+            left: b.left - off,
+            top: b.top - off,
+            width: b.width + 2 * off,
+            height: b.height + 2 * off,
+          };
           return (
             <g key={i} data-chrome="outline" data-subtype={n.subtype}>
               <rect
-                x={b.left}
-                y={b.top}
-                width={b.width}
-                height={b.height}
+                x={o.left}
+                y={o.top}
+                width={o.width}
+                height={o.height}
                 rx={radius > 0 ? radius : undefined}
                 fill={boxFill(n.subtype)}
                 stroke={outlineStroke}
@@ -599,10 +619,10 @@ function Chrome({ page }: { page: PageContextValue }) {
               {halo > 0 && (
                 // Outside the outline only, like a CSS spread shadow.
                 <rect
-                  x={b.left - haloAt}
-                  y={b.top - haloAt}
-                  width={b.width + 2 * haloAt}
-                  height={b.height + 2 * haloAt}
+                  x={o.left - haloAt}
+                  y={o.top - haloAt}
+                  width={o.width + 2 * haloAt}
+                  height={o.height + 2 * haloAt}
                   rx={radius > 0 ? radius + haloAt : undefined}
                   fill="none"
                   stroke={outlineStroke}
@@ -799,6 +819,8 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
         outline: item.editing
           ? `${cs.outline.editingWidth ?? 1}px solid ${cs.outline.color ?? cs.accent}`
           : 'none',
+        // sommo-io fork: kept off the glyphs like the selection outline (`outline.offset`).
+        outlineOffset: item.editing ? `${cs.outline.offset?.['free-text'] ?? 0}px` : undefined,
         cursor: item.editing ? 'text' : 'default',
         // A plain text box rotates about its centre (the box model — same as the
         // baked /AP). `box` is the unrotated box; CSS rotate matches our CW `rot`.

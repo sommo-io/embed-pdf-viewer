@@ -75,6 +75,13 @@ export interface ChromeSettings {
      */
     fill?: Readonly<Record<string, string>>;
     /**
+     * sommo-io fork: how far outside the box its selection outline is drawn,
+     * px, by subtype (`{ 'free-text': 3 }`): a box whose text reaches its
+     * edges keeps the outline off the glyphs. Absent kinds sit on the box.
+     * Also offsets a free-text box's typing outline.
+     */
+    offset?: Readonly<Record<string, number>>;
+    /**
      * sommo-io fork: the outline of a free-text box while its text is typed
      * in, px. Default 1, in the outline color.
      */
