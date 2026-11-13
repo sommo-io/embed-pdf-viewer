@@ -31,7 +31,7 @@ import {
 } from './geometry';
 import { groupCaps } from './group';
 import { isSelectable, paintOrder } from './hit';
-import { capsFor } from './kinds';
+import { boxHandlesHidden, capsFor } from './kinds';
 import { annotTransformable, viewable } from './flags';
 import {
   anchoredBox,
@@ -507,6 +507,7 @@ export function chrome(
   knobOffset: number = ROTATE_KNOB_OFFSET,
   view?: ViewEnv,
   edgeHandleMinSide = 0,
+  hiddenHandleSubtypes: readonly string[] = [],
 ): ChromeNode[] {
   const nodes: ChromeNode[] = [];
   if (m.draft?.g === 'marquee' && m.draft.pon === pon) {
@@ -554,9 +555,9 @@ export function chrome(
       measure?.intent === 'LineDimension' && distanceLayout(g, measure, style.strokeWidth);
     const frame = effectiveSelectionFrame(m, a.id, g, view);
     if (frame.angle !== 0) {
-      nodes.push({ kind: 'obb', corners: frame.corners, angle: frame.angle });
+      nodes.push({ kind: 'obb', corners: frame.corners, angle: frame.angle, subtype: a.subtype });
     } else {
-      nodes.push({ kind: 'outline', rect: unionRect(frame.corners) });
+      nodes.push({ kind: 'outline', rect: unionRect(frame.corners), subtype: a.subtype });
     }
     // handles for kinds that resize (box) or vertex-edit; anchored/markup show
     // a bare outline — and so do locked (frozen) annotations, the SAME gate
@@ -565,7 +566,12 @@ export function chrome(
     // them. `geomHandles` already places them on the rotated box; `rot`
     // additionally tilts each handle GLYPH so it rides the box's orientation.
     // Suppressed during a live rotate (`rd`) — guides own that mode.
-    if (!rd && annotTransformable(a) && (caps.resizable || caps.vertexEditable)) {
+    if (
+      !rd &&
+      annotTransformable(a) &&
+      (caps.resizable || caps.vertexEditable) &&
+      !boxHandlesHidden(a.subtype, a.geom, hiddenHandleSubtypes)
+    ) {
       const handles = distance ? distanceHandles(distance) : geomHandles(g, edgeHandleMinSide);
       for (const handle of handles) {
         nodes.push({

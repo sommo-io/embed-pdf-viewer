@@ -11,7 +11,7 @@ import {
   rotatePoint,
   unionRect,
 } from './geometry';
-import { capsFor, isMarkup } from './kinds';
+import { boxHandlesHidden, capsFor, isMarkup } from './kinds';
 import { groupCaps } from './group';
 import { isSubstrateOnly } from './plane';
 import { annotInteractive, annotTransformable, viewable } from './flags';
@@ -197,7 +197,7 @@ export function hitTest(
           return { t: 'rotate', ids: [a.id], pivot: frame.center };
         }
       }
-      if (hasHandles(m, a)) {
+      if (hasHandles(m, a) && !boxHandlesHidden(a.subtype, a.geom, geom.hiddenHandleSubtypes)) {
         const geometry = hitGeomOf(a, view);
         const distance =
           a.measure?.intent === 'LineDimension' &&

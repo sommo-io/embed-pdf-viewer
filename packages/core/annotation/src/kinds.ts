@@ -574,6 +574,19 @@ export const KINDS: Record<string, AnnotationKind> = {
 /** The capabilities of a subtype, or the read-only default for unknown kinds. */
 export const capsFor = (subtype: string): KindCaps => KINDS[subtype]?.caps ?? READONLY;
 
+/**
+ * sommo-io fork: whether a selected annotation's resize handles are switched
+ * off by the chrome settings (`handles.hiddenFor`, a list of subtypes). Only a
+ * plain box is affected: a free-text callout keeps its leader handles. Drawn
+ * and grabbed alike: the body then only moves (and rotates by the knob).
+ */
+export const boxHandlesHidden = (
+  subtype: string,
+  geom: Geom,
+  hiddenFor: readonly string[] | undefined,
+): boolean =>
+  !!hiddenFor?.includes(subtype) && (geom.t === 'rect' || (geom.t === 'text' && !geom.callout));
+
 const NO_PROPS: PropSpec[] = [];
 
 /** A kind's editable properties in display order — empty for unknown kinds.
