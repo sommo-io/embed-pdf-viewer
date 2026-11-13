@@ -388,6 +388,14 @@ function Chrome({ page }: { page: PageContextValue }) {
   // ONE outline style for the resting rect AND the rotated obb — the selection
   // box must never flip dashed↔solid when a rotation starts.
   const outlineDash = cs.outline.style === 'dashed' ? '4 3' : undefined;
+  // sommo-io fork: a soft ring under the outline, a kind's fill and rounded corners.
+  const halo = cs.outline.halo ?? 0;
+  const haloWidth = cs.outline.width + 2 * halo;
+  const haloAt = cs.outline.width / 2 + halo / 2;
+  const boxFill = (subtype?: string) => (subtype && cs.outline.fill?.[subtype]) || 'none';
+  const radius = cs.outline.radius ?? 0;
+  // sommo-io fork: the outline drawn this far outside the box (px), by subtype.
+  const boxOffset = (subtype?: string) => (subtype && cs.outline.offset?.[subtype]) || 0;
   // The live rotation readout — an HTML chip (rounded box + padded text beats
   // hand-rolling it in SVG), riding the pointer like v2's.
   const chip = nodes.find((n) => n.kind === 'angle-chip');
@@ -400,9 +408,25 @@ function Chrome({ page }: { page: PageContextValue }) {
           if (n.kind === 'handle') {
             const p = page.transform.toPixels(n.at);
             const hs = cs.handles.size;
+            if (cs.handles.shape === 'round') {
+              // sommo-io fork: a round handle (a dot), same size and grab zone.
+              return (
+                <circle
+                  key={i}
+                  data-chrome="handle"
+                  cx={p.x}
+                  cy={p.y}
+                  r={hs / 2}
+                  fill={cs.handles.fill}
+                  stroke={handleStroke}
+                  strokeWidth={1.5}
+                />
+              );
+            }
             return (
               <rect
                 key={i}
+                data-chrome="handle"
                 x={p.x - hs / 2}
                 y={p.y - hs / 2}
                 width={hs}
@@ -440,21 +464,44 @@ function Chrome({ page }: { page: PageContextValue }) {
           // An oriented selection box (a tilted shape/group): a closed quad through
           // the four content-space corners — replaces the axis-aligned outline.
           if (n.kind === 'obb') {
-            const pts = n.corners
-              .map((c) => {
-                const p = page.transform.toPixels(c);
-                return `${p.x},${p.y}`;
+            const px = n.corners.map((c) => page.transform.toPixels(c));
+            const off = boxOffset(n.subtype);
+            // Each corner pushed `off` px out along both of its edges.
+            const unit = (x: number, y: number) => {
+              const l = Math.hypot(x, y) || 1;
+              return { x: x / l, y: y / l };
+            };
+            const pts = px
+              .map((p, k) => {
+                if (!off) return `${p.x},${p.y}`;
+                const prev = px[(k + 3) % 4];
+                const next = px[(k + 1) % 4];
+                const a = unit(p.x - prev.x, p.y - prev.y);
+                const c = unit(p.x - next.x, p.y - next.y);
+                return `${p.x + off * (a.x + c.x)},${p.y + off * (a.y + c.y)}`;
               })
               .join(' ');
             return (
-              <polygon
-                key={i}
-                points={pts}
-                fill="none"
-                stroke={outlineStroke}
-                strokeWidth={cs.outline.width}
-                strokeDasharray={outlineDash}
-              />
+              <g key={i} data-chrome="outline" data-subtype={n.subtype}>
+                {/* The box first: it is the selection's outline for any reader of the markup. */}
+                <polygon
+                  points={pts}
+                  fill={boxFill(n.subtype)}
+                  stroke={outlineStroke}
+                  strokeWidth={cs.outline.width}
+                  strokeDasharray={outlineDash}
+                />
+                {halo > 0 && (
+                  <polygon
+                    points={pts}
+                    fill="none"
+                    stroke={outlineStroke}
+                    strokeOpacity={0.18}
+                    strokeWidth={haloWidth}
+                    strokeLinejoin="round"
+                  />
+                )}
+              </g>
             );
           }
           // Rotation guides (live rotate only): the faint 0°/90° reference cross
@@ -494,7 +541,7 @@ function Chrome({ page }: { page: PageContextValue }) {
             const at = page.transform.toPixels(n.at);
             const from = page.transform.toPixels(n.from);
             return (
-              <g key={i}>
+              <g key={i} data-chrome="knob">
                 {cs.knob.stalk && (
                   <line
                     x1={from.x}
@@ -513,6 +560,21 @@ function Chrome({ page }: { page: PageContextValue }) {
                   stroke={knobStroke}
                   strokeWidth={1.5}
                 />
+                {cs.knob.icon && (
+                  // sommo-io fork: a rotate arrow in the dot (an open circle with a head).
+                  <g
+                    data-chrome="rotate-icon"
+                    transform={`translate(${at.x - cs.knob.size * 0.3} ${at.y - cs.knob.size * 0.3}) scale(${(cs.knob.size * 0.6) / 24})`}
+                    fill="none"
+                    stroke={knobStroke}
+                    strokeWidth={2.6}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M20 12a8 8 0 1 1-2.3-5.7" />
+                    <path d="M20 4v5h-5" />
+                  </g>
+                )}
               </g>
             );
           }
@@ -534,18 +596,41 @@ function Chrome({ page }: { page: PageContextValue }) {
               />
             );
           }
+          const off = boxOffset(n.subtype);
+          const o = {
+            left: b.left - off,
+            top: b.top - off,
+            width: b.width + 2 * off,
+            height: b.height + 2 * off,
+          };
           return (
-            <rect
-              key={i}
-              x={b.left}
-              y={b.top}
-              width={b.width}
-              height={b.height}
-              fill="none"
-              stroke={outlineStroke}
-              strokeWidth={cs.outline.width}
-              strokeDasharray={outlineDash}
-            />
+            <g key={i} data-chrome="outline" data-subtype={n.subtype}>
+              <rect
+                x={o.left}
+                y={o.top}
+                width={o.width}
+                height={o.height}
+                rx={radius > 0 ? radius : undefined}
+                fill={boxFill(n.subtype)}
+                stroke={outlineStroke}
+                strokeWidth={cs.outline.width}
+                strokeDasharray={outlineDash}
+              />
+              {halo > 0 && (
+                // Outside the outline only, like a CSS spread shadow.
+                <rect
+                  x={o.left - haloAt}
+                  y={o.top - haloAt}
+                  width={o.width + 2 * haloAt}
+                  height={o.height + 2 * haloAt}
+                  rx={radius > 0 ? radius + haloAt : undefined}
+                  fill="none"
+                  stroke={outlineStroke}
+                  strokeOpacity={0.18}
+                  strokeWidth={halo}
+                />
+              )}
+            </g>
           );
         })}
       </svg>
@@ -586,6 +671,7 @@ function Chrome({ page }: { page: PageContextValue }) {
  */
 function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
   const anno = useCapability(AnnotationHostToken);
+  const cs = useSelector(AnnotationHostToken, (c) => c.chromeSettings());
   const ref = React.useRef<HTMLDivElement>(null);
   const box = boxOf(item.box, page);
   const scale = item.box.width > 0 ? box.width / item.box.width : 1; // content units → screen px
@@ -729,7 +815,12 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
         overflowWrap: 'break-word',
         overflowY: item.editing ? 'auto' : 'hidden',
         overflowX: 'hidden',
-        outline: item.editing ? '1px solid #3858e9' : 'none',
+        // sommo-io fork: the typing outline follows the selection chrome (color, width).
+        outline: item.editing
+          ? `${cs.outline.editingWidth ?? 1}px solid ${cs.outline.color ?? cs.accent}`
+          : 'none',
+        // sommo-io fork: kept off the glyphs like the selection outline (`outline.offset`).
+        outlineOffset: item.editing ? `${cs.outline.offset?.['free-text'] ?? 0}px` : undefined,
         cursor: item.editing ? 'text' : 'default',
         // A plain text box rotates about its centre (the box model — same as the
         // baked /AP). `box` is the unrotated box; CSS rotate matches our CW `rot`.

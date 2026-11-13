@@ -239,6 +239,8 @@ export function createAnnotationCapability(
       // Drawn and grabbed alike (never boosted): a side under
       // `handles.edgeMinSide` shows no edge handles on it (sommo-io fork, see geomHandles).
       edgeHandleMinSide: (cs.handles.edgeMinSide ?? 0) / s,
+      // Drawn and grabbed alike: these kinds' plain boxes have no resize handles (sommo-io fork).
+      hiddenHandleSubtypes: cs.handles.hiddenFor ?? [],
     };
   };
   /** Finger-sized grab zones: 2× the mouse tolerances lands a ~24px handle hit
@@ -329,6 +331,7 @@ export function createAnnotationCapability(
       geom.knobOffset,
       viewEnv(zoom, rotation),
       geom.edgeHandleMinSide,
+      geom.hiddenHandleSubtypes,
     );
     // `guides.enabled` is presentation config, filtered HERE so the emitted
     // chrome stays authoritative for every painter (default and headless alike).
