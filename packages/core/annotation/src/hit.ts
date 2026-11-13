@@ -168,6 +168,21 @@ function smallBoxContains(g: Geom, p: Vec, handleTol: number): boolean {
  *     so an unfilled circle is grabbed only on its outline),
  *  3. else empty.
  */
+/** sommo-io fork: `p` lies inside the quad (consecutive corners) grown by `tol` on every side. */
+function nearQuad(corners: readonly Vec[], p: Vec, tol: number): boolean {
+  const [o, u, , v] = corners;
+  const ux = u.x - o.x,
+    uy = u.y - o.y,
+    vx = v.x - o.x,
+    vy = v.y - o.y;
+  const lu = Math.hypot(ux, uy),
+    lv = Math.hypot(vx, vy);
+  if (lu === 0 || lv === 0) return false;
+  const s = ((p.x - o.x) * ux + (p.y - o.y) * uy) / lu;
+  const t = ((p.x - o.x) * vx + (p.y - o.y) * vy) / lv;
+  return s >= -tol && s <= lu + tol && t >= -tol && t <= lv + tol;
+}
+
 export function hitTest(
   m: Model,
   pon: number,
@@ -197,7 +212,18 @@ export function hitTest(
           return { t: 'rotate', ids: [a.id], pivot: frame.center };
         }
       }
-      if (hasHandles(m, a) && !boxHandlesHidden(a.subtype, a.geom, geom.hiddenHandleSubtypes)) {
+      // sommo-io fork: a box without resize handles (`handles.hiddenFor`) is
+      // moved from its frame and a grab zone around it, where its handles
+      // would have been: the frame and halo are drawn outside the box.
+      const handlesHidden = boxHandlesHidden(a.subtype, a.geom, geom.hiddenHandleSubtypes);
+      if (
+        handlesHidden &&
+        annotTransformable(a) &&
+        nearQuad(annotationSelectionFrame(a, view).corners, p, geom.handleTol)
+      ) {
+        return { t: 'annot', id: a.id };
+      }
+      if (hasHandles(m, a) && !handlesHidden) {
         const geometry = hitGeomOf(a, view);
         const distance =
           a.measure?.intent === 'LineDimension' &&

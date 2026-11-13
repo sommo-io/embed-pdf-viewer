@@ -36,7 +36,7 @@ describe('hidden box handles (sommo-io fork)', () => {
     expect(hidden.some((n) => n.kind === 'rotate-knob')).toBe(true);
   });
 
-  it('a corner of a listed kind moves the body instead of resizing it', () => {
+  it('a corner, the frame and a grab zone around a listed kind move the body instead of resizing it', () => {
     const m = squareFrom({ x: 100, y: 100 }, { x: 200, y: 160 });
     const id = m.selected[0];
     expect(hitTest(m, PON, { x: 199, y: 159 }, GEOM, 6)).toMatchObject({
@@ -44,8 +44,12 @@ describe('hidden box handles (sommo-io fork)', () => {
       handle: 'se',
     });
     expect(hitTest(m, PON, { x: 199, y: 159 }, HIDDEN, 6)).toEqual({ t: 'annot', id });
-    // Outside the box, past where the handle was: nothing.
-    expect(hitTest(m, PON, { x: 208, y: 166 }, HIDDEN, 6)).not.toMatchObject({ t: 'handle' });
+    // On the frame and just outside it (the drawn frame and halo, within a grab zone): the body, never a handle.
+    expect(hitTest(m, PON, { x: 201, y: 161 }, HIDDEN, 6)).toEqual({ t: 'annot', id });
+    expect(hitTest(m, PON, { x: 208, y: 166 }, HIDDEN, 6)).toEqual({ t: 'annot', id });
+    expect(hitTest(m, PON, { x: 150, y: 96 }, HIDDEN, 6)).toEqual({ t: 'annot', id });
+    // Past the grab zone: not this box.
+    expect(hitTest(m, PON, { x: 230, y: 190 }, HIDDEN, 6)).toEqual({ t: 'empty' });
   });
 
   it('only a plain box is affected: a callout keeps its leader handles', () => {
