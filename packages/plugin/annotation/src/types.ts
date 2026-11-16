@@ -62,6 +62,30 @@ export interface ChromeSettings {
     width: number;
     /** Overrides `accent`. */
     color?: string;
+    /** sommo-io fork: corner radius of the resting box, px. Default 0. */
+    radius?: number;
+    /**
+     * sommo-io fork: a soft ring around the box, px each side (the accent at
+     * low opacity, under the outline). Default 0 (none).
+     */
+    halo?: number;
+    /**
+     * sommo-io fork: a fill inside the box of a single selected annotation, by
+     * subtype (`{ 'free-text': 'rgba(…)' }`). Absent kinds stay unfilled.
+     */
+    fill?: Readonly<Record<string, string>>;
+    /**
+     * sommo-io fork: how far outside the box its selection outline is drawn,
+     * px, by subtype (`{ 'free-text': 3 }`): a box whose text reaches its
+     * edges keeps the outline off the glyphs. Absent kinds sit on the box.
+     * Also offsets a free-text box's typing outline.
+     */
+    offset?: Readonly<Record<string, number>>;
+    /**
+     * sommo-io fork: the outline of a free-text box while its text is typed
+     * in, px. Default 1, in the outline color.
+     */
+    editingWidth?: number;
   };
   /** Resize + vertex handles (independent of the knob — size them apart). */
   handles: {
@@ -76,6 +100,14 @@ export interface ChromeSettings {
      * its finger grab zone (px).
      */
     edgeMinSide?: number;
+    /**
+     * sommo-io fork: subtypes whose plain box shows and grabs no resize
+     * handles (a free-text box that sizes itself to its text). A callout keeps
+     * its leader handles. Default none.
+     */
+    hiddenFor?: readonly string[];
+    /** sommo-io fork: the handle glyph. Default `'square'`. */
+    shape?: 'square' | 'round';
     fill: string;
     /** Overrides `accent`. */
     stroke?: string;
@@ -93,6 +125,11 @@ export interface ChromeSettings {
     fill: string;
     /** Overrides `accent` (dot outline + stalk). */
     stroke?: string;
+    /**
+     * sommo-io fork: draw a rotate arrow inside the dot, in the stroke color
+     * (a filled button rather than a bare grab dot). Default false.
+     */
+    icon?: boolean;
   };
   /** The rotation guides shown while a rotate gesture runs: a fixed 0°/90°
    *  reference cross + a live indicator line, drawn as full-bleed chords of the

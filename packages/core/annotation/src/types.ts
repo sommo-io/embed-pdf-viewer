@@ -564,6 +564,11 @@ export interface ChromeGeom {
    * `geomHandles`). Optional: absent keeps all eight (sommo-io fork).
    */
   edgeHandleMinSide?: number;
+  /**
+   * Subtypes whose plain box shows and grabs no resize handles (see
+   * `boxHandlesHidden`). Optional: absent keeps every kind's handles (sommo-io fork).
+   */
+  hiddenHandleSubtypes?: readonly string[];
 }
 
 export interface PointerInput {
@@ -915,12 +920,14 @@ export interface InkStraightenOptions {
 }
 
 export type ChromeNode =
-  | { kind: 'outline'; rect: Rect }
+  // `subtype` (sommo-io fork): the selected annotation's kind on a single
+  // selection, so a painter can style a kind's box (e.g. tint a text box).
+  | { kind: 'outline'; rect: Rect; subtype?: string }
   // An oriented selection box: the four corners of the (possibly tilted) OBB in
   // order, for rotatable kinds. The renderer draws the closed quad; `angle` (deg)
   // lets it orient resize cursors. Replaces the axis-aligned `outline` whenever a
   // shape (or group) carries rotation.
-  | { kind: 'obb'; corners: [Vec, Vec, Vec, Vec]; angle: number }
+  | { kind: 'obb'; corners: [Vec, Vec, Vec, Vec]; angle: number; subtype?: string }
   // `rot` (deg, CW) tilts the handle glyph itself so it rides a rotated box.
   | { kind: 'handle'; at: Vec; cursor: Cursor; rot?: number }
   // The rotate knob: `at` is where the grab dot sits (hanging off the top edge),
