@@ -76,6 +76,18 @@ export function isValidActionNodeId(raw: number): boolean {
 
 /** Mutable aggregate budget shared by every action model in one read job.
  *  Payload budgets are RESERVED before the backing buffer is allocated. */
+/** sommo-io fork: the message of the error a tracker throws past its budget. */
+export const ACTION_READ_BUDGET_EXCEEDED = 'aggregate PDF action read budget exceeded';
+
+/** sommo-io fork: whether `error` is a tracker's budget error (and not another malformed action). */
+export function isActionReadBudgetExceeded(error: unknown): boolean {
+  return (
+    error instanceof EngineError &&
+    error.code === EngineErrorCode.MalformedPdf &&
+    error.message === ACTION_READ_BUDGET_EXCEEDED
+  );
+}
+
 export class ActionReadBudgetTracker {
   private models = 0;
   private nodes = 0;
@@ -118,7 +130,7 @@ export class ActionReadBudgetTracker {
     ) {
       throw new EngineError(
         EngineErrorCode.MalformedPdf,
-        'aggregate PDF action read budget exceeded',
+        ACTION_READ_BUDGET_EXCEEDED,
         {
           details: {
             models: this.models,
