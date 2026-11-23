@@ -13,7 +13,11 @@ import type {
 import type { PdfRuntimeModule, Ptr } from '@embedpdf/engine-runtime';
 
 import { readUtf16String, readUtf8String } from '../../../runtime/memory/strings';
-import { ActionReadBudgetTracker, readActionModel } from '../../actions/ActionModelReader';
+import {
+  ActionReadBudgetTracker,
+  isActionReadBudgetExceeded,
+  readActionModel,
+} from '../../actions/ActionModelReader';
 
 // Mirrors EPDF_FORMFIELD_FAMILY_* in public/epdf_form.h.
 export const FAMILY_BY_CODE: Record<number, FormFieldFamily> = {
@@ -117,13 +121,17 @@ function readOptions(runtime: PdfRuntimeModule, model: Ptr, fieldIndex: number):
   return options;
 }
 
-/** Read one field of the native model into its per-family DTO. */
+/**
+ * Read one field of the native model into its per-family DTO.
+ *
+ * sommo-io fork: `actionBudget` null reads the field without its actions.
+ */
 export function readFieldAt(
   runtime: PdfRuntimeModule,
   model: Ptr,
   fieldIndex: number,
   docPtr: Ptr,
-  actionBudget = new ActionReadBudgetTracker(),
+  actionBudget: ActionReadBudgetTracker | null = new ActionReadBudgetTracker(),
 ): FormFieldDTO {
   const { fn } = runtime;
   const fieldObjectNumber = fn.EPDFForm_GetFieldObjNum(model, fieldIndex);
@@ -134,7 +142,10 @@ export function readFieldAt(
   const family = FAMILY_BY_CODE[fn.EPDFForm_GetFieldFamily(model, fieldIndex)] ?? 'unknown';
   const valueEntry = readValueEntry(runtime, model, fieldIndex, false);
   const defaultValueEntry = readValueEntry(runtime, model, fieldIndex, true);
-  const actions = readFieldActions(runtime, model, fieldIndex, docPtr, actionBudget);
+  const actions =
+    actionBudget === null
+      ? undefined
+      : readFieldActions(runtime, model, fieldIndex, docPtr, actionBudget);
 
   const base: FormFieldBase = {
     ref:
@@ -242,9 +253,22 @@ export function readFormSnapshot(runtime: PdfRuntimeModule, model: Ptr, docPtr: 
   const { fn } = runtime;
   const count = fn.EPDFForm_CountFields(model);
   const fields: FormFieldDTO[] = [];
-  const actionBudget = new ActionReadBudgetTracker();
+  // sommo-io fork: past the form's action budget the form still loads. The
+  // field that ran out and every field after it are read without their
+  // actions (/AA K, F, V, C); names, values, flags and widgets are all there.
+  // Before, one budget error failed the whole snapshot: no field at all.
+  let actionBudget: ActionReadBudgetTracker | null = new ActionReadBudgetTracker();
   for (let i = 0; i < count; i++) {
-    fields.push(readFieldAt(runtime, model, i, docPtr, actionBudget));
+    if (actionBudget !== null) {
+      try {
+        fields.push(readFieldAt(runtime, model, i, docPtr, actionBudget));
+        continue;
+      } catch (error) {
+        if (!isActionReadBudgetExceeded(error)) throw error;
+        actionBudget = null;
+      }
+    }
+    fields.push(readFieldAt(runtime, model, i, docPtr, null));
   }
   const calculationOrder: FormSnapshot['calculationOrder'] = [];
   const calculationCount = fn.EPDFForm_CountCalculationOrder(model);

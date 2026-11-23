@@ -36,6 +36,11 @@ export function registerFormEffects(ctx: EffectContext<FormState, FormAction>): 
         type: 'SET_MODEL',
         model: update(ctx.getState().model, { t: 'snapshot', snapshot }),
       });
+    } catch (err) {
+      // sommo-io fork: every caller fires and forgets (`void refresh()`), so
+      // a failed re-read must not become an unhandled rejection. The model
+      // keeps its last snapshot, as the capability's own refresh does.
+      console.warn('[form] form snapshot failed to load', err);
     } finally {
       refreshing = false;
     }
