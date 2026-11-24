@@ -255,6 +255,20 @@ describe('styleDeltaOf', () => {
       family: 'My Font',
     });
   });
+
+  // sommo-io fork: a squiggly underline is a wavy underline.
+  it('reads a wavy underline back as the run unknown text-decoration-style', () => {
+    expect(
+      styleDeltaOf(
+        { ...emptyStyle(), textDecoration: 'underline', textDecorationStyle: 'wavy' },
+        1,
+      ),
+    ).toEqual({ decoration: ['underline'], unknown: 'text-decoration-style:wavy' });
+    expect(styleDeltaOf({ ...emptyStyle(), textDecoration: 'underline wavy' }, 1)).toEqual({
+      decoration: ['underline'],
+      unknown: 'text-decoration-style:wavy',
+    });
+  });
 });
 
 // ---- Offsets ------------------------------------------------------------------

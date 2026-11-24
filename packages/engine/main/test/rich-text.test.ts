@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inflateSync } from 'node:zlib';
 
 import { EngineErrorCode, type FreeTextAnnotationDTO } from '@embedpdf/engine-core/runtime';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
@@ -394,5 +395,120 @@ describe('rich text FreeText (local engine)', () => {
     expect(saved).toContain('/Helv 24 Tf');
     expect(saved).not.toContain('EDocF');
     await doc.close();
+  });
+
+  // sommo-io fork: a squiggly underline is an underline whose style is wavy.
+  describe('a squiggly underline', () => {
+    const inflated = (bytes: Uint8Array): string[] => {
+      const text = latin1(bytes);
+      const out: string[] = [];
+      for (const m of text.matchAll(/stream\r?\n/g)) {
+        const start = m.index! + m[0].length;
+        const end = text.indexOf('endstream', start);
+        try {
+          out.push(latin1(inflateSync(bytes.subarray(start, end))));
+        } catch {
+          out.push(text.slice(start, end));
+        }
+      }
+      return out;
+    };
+    /** A zigzag: a path with at least `n` line segments in a row. */
+    const zigzags = (streams: string[], n: number) =>
+      streams.filter((s) => new RegExp(`(?:[\\d.\\-]+ [\\d.\\-]+ l\\s+){${n}}`).test(s));
+
+    for (const face of ['helvetica', 'roboto'] as const) {
+      test(`draws as a wave and keeps its style through a save (${face})`, async () => {
+        engine = await createLocalEngine({ runtime: { prefer: 'wasm' } });
+        if (face === 'roboto') {
+          await engine.fonts.register({ key: 'roboto', familyName: 'Roboto', data: roboto });
+        }
+        const doc = await engine.open({
+          kind: 'bytes',
+          id: `rt-wavy-${face}`,
+          bytes: annotationsPdf,
+        });
+        const created = await doc.page(PAGE).annotations.create({
+          subtype: 'free-text',
+          intent: 'free-text',
+          fontFamily: face,
+          fontSize: 14,
+          textAlign: 'left',
+          rect: RECT,
+          richText: {
+            body: { family: face === 'roboto' ? 'roboto' : 'Helvetica', size: 14 },
+            paragraphs: [
+              {
+                runs: [
+                  { text: 'Hello ' },
+                  {
+                    text: 'wavy words',
+                    style: { decoration: ['underline'], unknown: 'text-decoration-style:wavy' },
+                  },
+                  { text: ' and ' },
+                  { text: 'straight', style: { decoration: ['underline'] } },
+                ],
+              },
+            ],
+          },
+        });
+        const dto = created.created as FreeTextAnnotationDTO;
+        expect(dto.richText.paragraphs[0]!.runs[1]!.style?.unknown).toBe(
+          'text-decoration-style:wavy',
+        );
+        const saved = await doc.download();
+        expect(latin1(saved)).toContain('text-decoration:underline;text-decoration-style:wavy');
+        const streams = inflated(saved);
+        // The wave (one zigzag) and the straight underline beside it.
+        expect(zigzags(streams, 6).length).toBe(1);
+        expect(
+          streams.some((s) => /BT[\s\S]*Tj[\s\S]*ET/.test(s) && / m\s+[\d.]+ [\d.]+ l\s+S/.test(s)),
+        ).toBe(true);
+        // A later bake (a colour change) draws the wave again.
+        const updated = await doc.page(PAGE).annotations.update(dto.ref, {
+          subtype: 'free-text',
+          interiorColor: { r: 255, g: 255, b: 200 },
+        });
+        expect(updated.appearance.action).toBe('regenerated');
+        expect(zigzags(inflated(await doc.download()), 6).length).toBe(1);
+        await doc.close();
+
+        const reopened = await engine.open({
+          kind: 'bytes',
+          id: `rt-wavy-${face}-2`,
+          bytes: saved,
+        });
+        const listed = await reopened.page(PAGE).annotations.list();
+        const back = listed.annotations.find(
+          (a) => a.subtype === 'free-text' && a.contents?.includes('wavy words'),
+        ) as FreeTextAnnotationDTO;
+        expect(back.richText.paragraphs[0]!.runs[1]!.style).toMatchObject({
+          decoration: ['underline'],
+          unknown: 'text-decoration-style:wavy',
+        });
+        await reopened.close();
+      });
+    }
+
+    test('a box with no squiggly run keeps the engine appearance', async () => {
+      engine = await createLocalEngine({ runtime: { prefer: 'wasm' } });
+      const doc = await engine.open({ kind: 'bytes', id: 'rt-straight', bytes: annotationsPdf });
+      await doc.page(PAGE).annotations.create({
+        subtype: 'free-text',
+        intent: 'free-text',
+        fontFamily: 'helvetica',
+        fontSize: 14,
+        textAlign: 'left',
+        rect: RECT,
+        richText: {
+          body: { family: 'Helvetica', size: 14, decoration: ['underline'] },
+          paragraphs: [{ runs: [{ text: 'straight' }] }],
+        },
+      });
+      const streams = inflated(await doc.download());
+      expect(zigzags(streams, 6).length).toBe(0);
+      expect(streams.some((s) => s.includes('EPDFWRAP'))).toBe(false);
+      await doc.close();
+    });
   });
 });

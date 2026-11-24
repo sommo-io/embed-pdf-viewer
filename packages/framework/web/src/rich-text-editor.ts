@@ -117,6 +117,8 @@ export interface EditorStyle {
   fontStyle: string;
   textDecoration: string;
   textDecorationLine?: string;
+  /** sommo-io fork: `wavy` for a squiggly underline. */
+  textDecorationStyle?: string;
   color: string;
   fontSize: string;
   fontFamily: string;
@@ -233,6 +235,13 @@ export function styleDeltaOf(style: EditorStyle | undefined, scale: number): Ric
       .split(/\s+/)
       .filter((p): p is 'underline' | 'line-through' => p === 'underline' || p === 'line-through');
   }
+  // sommo-io fork: a squiggly underline is a wavy one (the engine keeps the
+  // declaration among the run's unknown CSS); `solid` is said only by a
+  // straight run under a squiggly body.
+  const line =
+    style.textDecorationStyle ||
+    (style.textDecoration ?? '').split(/\s+/).find((p) => p === 'wavy' || p === 'solid');
+  if (line === 'wavy' || line === 'solid') delta.unknown = `text-decoration-style:${line}`;
   if (style.color) {
     const hex = cssColorToHex(style.color);
     if (hex) delta.color = hex;
@@ -266,6 +275,9 @@ function applyStyleDelta(
     const lines = delta.decoration.map((d) => (d === 'word' ? 'underline' : d));
     style.textDecoration = lines.length ? [...new Set(lines)].join(' ') : 'none';
   }
+  // sommo-io fork: a squiggly underline (after the shorthand, which resets it).
+  const line = /(?:^|;)\s*text-decoration-style\s*:\s*(wavy|solid)\b/i.exec(delta.unknown ?? '');
+  if (line) style.textDecorationStyle = line[1]!.toLowerCase();
   if (delta.color !== undefined) style.color = delta.color;
   if (delta.script !== undefined && delta.script !== 'normal') {
     // The engine's sub/superscript ratio; the size itself stays inherited.

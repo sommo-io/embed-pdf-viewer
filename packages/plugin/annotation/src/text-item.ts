@@ -49,9 +49,13 @@ export function buildTextItems(m: Model, pon: number, view?: ViewEnv): TextItem[
         color: t.fontColor,
         fontWeight: t.bold ? 700 : 400,
         fontStyle: t.italic ? 'italic' : 'normal',
-        // sommo-io fork: strikethrough too.
+        // sommo-io fork: strikethrough too, and a wavy (squiggly) underline.
         textDecoration:
-          [t.underline ? 'underline' : '', t.strikethrough ? 'line-through' : '']
+          [
+            t.underline || t.squiggly ? 'underline' : '',
+            t.strikethrough ? 'line-through' : '',
+            t.squiggly ? 'wavy' : '',
+          ]
             .filter(Boolean)
             .join(' ') || 'none',
         align: t.textAlign,

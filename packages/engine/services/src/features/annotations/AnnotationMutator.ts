@@ -43,6 +43,7 @@ import {
 } from './internal/read/joinWidgetField';
 import { readAnnotationFromPtr } from './internal/read/readAnnotationFromPtr';
 import type { AnnotationWriteContext } from './internal/write/annotationWriteContext';
+import { bakeSquigglyUnderlines } from './internal/write/bakeSquigglyUnderline';
 import {
   applyDraft,
   applyPatch,
@@ -758,6 +759,21 @@ export class AnnotationMutator {
       blendMode === undefined
         ? fn.EPDFAnnot_GenerateAppearance(annotPtr)
         : fn.EPDFAnnot_GenerateAppearanceWithBlend(annotPtr, blendModeToCode(blendMode));
+    // sommo-io fork: the engine draws a squiggly underline straight; redraw
+    // the box with waves. Best-effort: a failure keeps the straight line.
+    if (ok && fn.FPDFAnnot_GetSubtype(annotPtr) === PdfAnnotationSubtypeCode.FREETEXT) {
+      try {
+        bakeSquigglyUnderlines(
+          this.runtime,
+          annotPtr,
+          readContextFor(this.session, this.fonts),
+          this.writeContext(pagePtr),
+          blendMode,
+        );
+      } catch {
+        // keep the engine's appearance
+      }
+    }
     fn.FPDFPage_GenerateContent(pagePtr);
     return ok;
   }

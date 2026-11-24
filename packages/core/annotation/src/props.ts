@@ -49,6 +49,7 @@ export const textStyleFromProps = (p: AnnotationProps): TextStyle => ({
   ...(p.italic !== undefined ? { italic: p.italic } : {}),
   ...(p.underline !== undefined ? { underline: p.underline } : {}),
   ...(p.strikethrough !== undefined ? { strikethrough: p.strikethrough } : {}),
+  ...(p.squiggly !== undefined ? { squiggly: p.squiggly } : {}),
 });
 
 /** Does this kind's prop table declare `link` (attachable link)? The link
@@ -98,6 +99,8 @@ export function readProp<K extends PropKey>(a: Annot, key: K): AnnotationProps[K
         return a.text ? (a.text.underline ?? false) : undefined;
       case 'strikethrough':
         return a.text ? (a.text.strikethrough ?? false) : undefined;
+      case 'squiggly':
+        return a.text ? (a.text.squiggly ?? false) : undefined;
       case 'icon':
         return a.icon;
       case 'link':
@@ -185,12 +188,22 @@ export function applyProps(a: Annot, patch: AnnotationPropsPatch): Annot | null 
       text.textAlign = patch.textAlign;
       textChanged = true;
     }
-    for (const key of ['bold', 'italic', 'underline', 'strikethrough'] as const) {
+    for (const key of ['bold', 'italic', 'underline', 'strikethrough', 'squiggly'] as const) {
       const value = patch[key];
       if (value !== undefined && takes.has(key) && (text[key] ?? false) !== value) {
         text[key] = value;
         textChanged = true;
       }
+    }
+    // sommo-io fork: one underline at a time — turning the straight or the
+    // wavy one on turns the other off.
+    if (patch.squiggly === true && patch.underline === undefined && text.underline) {
+      text.underline = false;
+      textChanged = true;
+    }
+    if (patch.underline === true && patch.squiggly === undefined && text.squiggly) {
+      text.squiggly = false;
+      textChanged = true;
     }
     if (textChanged) next = { ...next, text };
   }

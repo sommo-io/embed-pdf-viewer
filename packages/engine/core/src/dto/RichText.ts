@@ -95,3 +95,47 @@ export function richTextPlainText(doc: { paragraphs: readonly RichTextParagraph[
 export function richTextParagraphsFromPlainText(text: string): RichTextParagraph[] {
   return text.split(/\r\n|\r|\n/).map((line) => ({ runs: [{ text: line }] }));
 }
+
+// ---- sommo-io fork: a squiggly (wavy) underline --------------------------------
+//
+// The engine models `text-decoration` lines only; a squiggly underline is an
+// `underline` whose `text-decoration-style` is `wavy`, kept among a style's
+// `unknown` declarations. The engine writes and reads those verbatim in
+// `/RC`, so the style survives a save; the engine-services writer redraws
+// such an underline as a wave in the appearance.
+
+const DECORATION_STYLE = /(?:^|;)\s*text-decoration-style\s*:\s*([a-z-]+)\s*(?=;|$)/i;
+
+/** The `text-decoration-style` among `unknown` CSS declarations, if any. */
+export function richTextDecorationStyle(unknown: string | undefined): string | undefined {
+  const match = unknown ? DECORATION_STYLE.exec(unknown) : null;
+  return match ? match[1]!.toLowerCase() : undefined;
+}
+
+/** `unknown` with its `text-decoration-style` set to `style` (or removed when
+ *  `style` is undefined); the other declarations stay as they were. Returns
+ *  undefined when nothing is left. */
+export function richTextWithDecorationStyle(
+  unknown: string | undefined,
+  style: string | undefined,
+): string | undefined {
+  const rest = (unknown ?? '')
+    .split(';')
+    .map((d) => d.trim())
+    .filter((d) => d && !/^text-decoration-style\s*:/i.test(d));
+  if (style) rest.push(`text-decoration-style:${style}`);
+  return rest.length ? rest.join(';') : undefined;
+}
+
+/** Whether a run (a delta over `body`) draws a squiggly underline: its
+ *  underline in force, and `wavy` its decoration style (the run's own
+ *  declaration, else the body's). */
+export function richTextRunIsSquiggly(
+  body: Pick<RichTextRunStyle, 'decoration' | 'unknown'> | undefined,
+  style: Partial<RichTextRunStyle> | undefined,
+): boolean {
+  const decoration = style?.decoration ?? body?.decoration ?? [];
+  if (!decoration.includes('underline') && !decoration.includes('word')) return false;
+  const line = richTextDecorationStyle(style?.unknown) ?? richTextDecorationStyle(body?.unknown);
+  return line === 'wavy';
+}

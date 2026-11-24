@@ -4,12 +4,13 @@
  * and the `/DA` text-slice ingest. Font/size/colour lowerings are the GENERIC
  * 1:1 keys (safe as singles since the engine's `/DA` read-modify-write).
  */
-import type {
-  AnnotationDTO,
-  CalloutLine,
-  LineEnding,
-  PdfRect,
-  PdfRectDifferences,
+import {
+  richTextRunIsSquiggly,
+  type AnnotationDTO,
+  type CalloutLine,
+  type LineEnding,
+  type PdfRect,
+  type PdfRectDifferences,
 } from '@embedpdf/engine-core/runtime';
 import {
   calloutLinePoints,
@@ -20,7 +21,7 @@ import {
   type TextStyle,
 } from '@embedpdf/core-annotation';
 
-import { decorationOf, richDocOf } from '../../rich-text';
+import { decorationOf, richDocOf, squigglyUnknown } from '../../rich-text';
 import { boxEmit, type KindProjection, type Wire } from '../projection';
 import {
   colorToCss,
@@ -48,7 +49,12 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
     textAlign: dto.textAlign,
     ...(body && body.weight >= 600 ? { bold: true } : {}),
     ...(body?.italic ? { italic: true } : {}),
-    ...(body?.decoration.includes('underline') ? { underline: true } : {}),
+    // sommo-io fork: a wavy underline is the squiggly toggle, not underline.
+    ...(body && richTextRunIsSquiggly(body, undefined)
+      ? { squiggly: true }
+      : body?.decoration.includes('underline')
+        ? { underline: true }
+        : {}),
     // sommo-io fork: strikethrough is the body's `line-through`.
     ...(body?.decoration.includes('line-through') ? { strikethrough: true } : {}),
   };
@@ -64,14 +70,18 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
 const formattingBody = (a: Annot): Wire => {
   const doc = richDocOf(a);
   const t = a.text;
+  // sommo-io fork: squiggly is the body's underline style.
+  const { unknown: _unknown, ...body } = doc.body;
+  const unknown = squigglyUnknown(_unknown, t?.squiggly);
   return {
     richText: {
       body: {
-        ...doc.body,
+        ...body,
         weight: t?.bold ? 700 : 400,
         italic: !!t?.italic,
         // sommo-io fork: strikethrough joins underline in the decoration.
         decoration: decorationOf(t),
+        ...(unknown !== undefined ? { unknown } : {}),
       },
       paragraphs: doc.paragraphs,
     },
@@ -181,6 +191,7 @@ export const freeText: KindProjection = {
     italic: formattingBody,
     underline: formattingBody,
     strikethrough: formattingBody,
+    squiggly: formattingBody,
   },
   // `/IT` + the initial `/Contents` are create-only statements; while typing,
   // the debounced text-edit write owns `contents`.

@@ -133,7 +133,13 @@ export type {
   RichTextRunStyle,
   RichTextScript,
 } from './dto/RichText';
-export { richTextPlainText, richTextParagraphsFromPlainText } from './dto/RichText';
+export {
+  richTextPlainText,
+  richTextParagraphsFromPlainText,
+  richTextDecorationStyle,
+  richTextWithDecorationStyle,
+  richTextRunIsSquiggly,
+} from './dto/RichText';
 
 export { EngineError, serializeError, deserializeError } from './errors/EngineError';
 export type { SerializedEngineError, EngineErrorOptions } from './errors/EngineError';

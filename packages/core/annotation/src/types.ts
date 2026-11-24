@@ -178,6 +178,9 @@ export interface TextStyle {
   italic?: boolean;
   underline?: boolean;
   strikethrough?: boolean;
+  /** sommo-io fork: the underline drawn as a wave; it replaces `underline`
+   *  (one excludes the other). */
+  squiggly?: boolean;
 }
 
 /**

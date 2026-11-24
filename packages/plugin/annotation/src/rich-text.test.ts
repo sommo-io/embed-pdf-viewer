@@ -152,6 +152,7 @@ describe('props ↔ runs', () => {
     ).toEqual({
       delta: { weight: 700, italic: false, decoration: ['underline'], size: 9, color: '#00FF00' },
       rest: { opacity: 0.5 },
+      clear: ['unknown'],
     });
     expect(runDeltaForProps({ fontFamily: 'roboto-bold' }, fonts).delta).toEqual({
       family: 'Roboto',
@@ -173,6 +174,57 @@ describe('props ↔ runs', () => {
     ).toEqual({
       decoration: ['line-through'],
     });
+  });
+
+  // sommo-io fork: a squiggly underline is an underline whose style is wavy.
+  it('turns squiggly on as a wavy underline that replaces the straight one', () => {
+    const on = runDeltaForProps({ squiggly: true }, undefined, {
+      underline: true,
+      strikethrough: true,
+    });
+    expect(on.delta).toEqual({
+      decoration: ['underline', 'line-through'],
+      unknown: 'text-decoration-style:wavy',
+    });
+    expect(on.clear).toEqual([]);
+    const straight = runDeltaForProps({ underline: true }, undefined, { squiggly: true });
+    expect(straight.delta).toEqual({ decoration: ['underline'] });
+    expect(straight.clear).toEqual(['unknown']);
+    // Under a squiggly body, a straight range says so.
+    const under = runDeltaForProps(
+      { squiggly: false },
+      undefined,
+      { squiggly: true },
+      'text-decoration-style:wavy',
+    );
+    expect(under.delta).toEqual({ decoration: [], unknown: 'text-decoration-style:solid' });
+  });
+
+  it('reads a squiggly range back as squiggly, not underlined', () => {
+    const doc: RichTextDocument = {
+      body,
+      paragraphs: [
+        {
+          runs: [
+            {
+              text: 'wavy',
+              style: { decoration: ['underline'], unknown: 'text-decoration-style:wavy' },
+            },
+            { text: ' line', style: { decoration: ['underline'] } },
+          ],
+        },
+      ],
+    };
+    expect(rangeProps(doc, { start: 0, end: 4 }).values).toMatchObject({
+      squiggly: true,
+      underline: false,
+    });
+    expect(rangeProps(doc, { start: 5, end: 9 }).values).toMatchObject({
+      squiggly: false,
+      underline: true,
+    });
+    const both = rangeProps(doc, { start: 0, end: 9 });
+    expect(both.mixed.sort()).toEqual(['squiggly', 'underline']);
   });
 
   it('reads a range back against the body: agreeing values, else mixed', () => {
