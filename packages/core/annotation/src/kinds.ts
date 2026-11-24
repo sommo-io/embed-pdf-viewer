@@ -47,6 +47,8 @@ export type PropSpec =
   | { key: 'underline'; label: string }
   /** sommo-io fork: the body's or the range's `line-through`. */
   | { key: 'strikethrough'; label: string }
+  /** sommo-io fork: an underline drawn as a wave (`text-decoration-style: wavy`). */
+  | { key: 'squiggly'; label: string }
   | { key: 'blendMode'; label: string }
   /** `/Name` icon picker for icon kinds; `options` are the legal names. */
   | { key: 'icon'; label: string; options: readonly string[] }
@@ -221,6 +223,7 @@ const TEXT_PROPS: PropSpec[] = [
   { key: 'italic', label: 'Italic' },
   { key: 'underline', label: 'Underline' },
   { key: 'strikethrough', label: 'Strikethrough' },
+  { key: 'squiggly', label: 'Squiggly underline' },
   { key: 'textAlign', label: 'Align' },
   OPACITY,
   { key: 'interiorColor', label: 'Background' },

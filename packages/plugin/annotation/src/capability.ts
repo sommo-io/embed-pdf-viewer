@@ -1823,12 +1823,18 @@ export function createAnnotationCapability(
       const doc = richDocOf(a, fonts);
       // sommo-io fork: the range's lines, so one toggle keeps the other.
       const lines = rangeProps(doc, range, fonts).values;
-      const { delta, rest } = runDeltaForProps(patch, fonts, {
-        underline: lines.underline === true,
-        strikethrough: lines.strikethrough === true,
-      });
+      const { delta, rest, clear } = runDeltaForProps(
+        patch,
+        fonts,
+        {
+          underline: lines.underline === true,
+          strikethrough: lines.strikethrough === true,
+          squiggly: lines.squiggly === true,
+        },
+        doc.body.unknown,
+      );
       if (Object.keys(delta).length) {
-        const next = applyStyleToRange({ paragraphs: doc.paragraphs }, range, delta);
+        const next = applyStyleToRange({ paragraphs: doc.paragraphs }, range, delta, clear);
         apply({ t: 'setRichText', id: range.id, doc: next });
         if (a.ref) scheduleTextCommit(a.ref);
       }

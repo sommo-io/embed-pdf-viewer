@@ -343,8 +343,13 @@ export interface TextItem {
     /** The body's formatting (runs override it as inline spans). */
     fontWeight: number;
     fontStyle: 'normal' | 'italic';
-    /** sommo-io fork: `underline`, `line-through`, both, or `none`. */
+    /** sommo-io fork: `underline`, `line-through`, both, or `none`. A
+     *  squiggly underline is not in it: see `squiggly`. */
     textDecoration: string;
+    /** sommo-io fork: the body's underline is squiggly. The editor draws that
+     *  wave itself (`RichTextEditorProps.squiggly`), the same zigzag the saved
+     *  appearance has, instead of the browser's own wavy line. */
+    squiggly?: boolean;
     align: 'left' | 'center' | 'right';
     padding: number;
   };

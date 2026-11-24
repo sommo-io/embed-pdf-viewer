@@ -4,12 +4,15 @@
  * and the `/DA` text-slice ingest. Font/size/colour lowerings are the GENERIC
  * 1:1 keys (safe as singles since the engine's `/DA` read-modify-write).
  */
-import type {
-  AnnotationDTO,
-  CalloutLine,
-  LineEnding,
-  PdfRect,
-  PdfRectDifferences,
+import {
+  richTextRunIsSquiggly,
+  type RichTextDocument,
+  type RichTextParagraph,
+  type AnnotationDTO,
+  type CalloutLine,
+  type LineEnding,
+  type PdfRect,
+  type PdfRectDifferences,
 } from '@embedpdf/engine-core/runtime';
 import {
   calloutLinePoints,
@@ -20,7 +23,7 @@ import {
   type TextStyle,
 } from '@embedpdf/core-annotation';
 
-import { decorationOf, richDocOf } from '../../rich-text';
+import { decorationOf, richDocOf, squigglyUnknown } from '../../rich-text';
 import { boxEmit, type KindProjection, type Wire } from '../projection';
 import {
   colorToCss,
@@ -48,10 +51,45 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
     textAlign: dto.textAlign,
     ...(body && body.weight >= 600 ? { bold: true } : {}),
     ...(body?.italic ? { italic: true } : {}),
-    ...(body?.decoration.includes('underline') ? { underline: true } : {}),
+    // sommo-io fork: a wavy underline is the squiggly toggle, not underline.
+    ...(dto.richText && boxIsSquiggly(dto.richText)
+      ? { squiggly: true }
+      : body?.decoration.includes('underline')
+        ? { underline: true }
+        : {}),
     // sommo-io fork: strikethrough is the body's `line-through`.
     ...(body?.decoration.includes('line-through') ? { strikethrough: true } : {}),
   };
+}
+
+/**
+ * sommo-io fork: is the whole box's underline wavy? Its body says so, or —
+ * as the engine reads a saved box back, the body's `text-decoration-style`
+ * moved onto the runs — the body is underlined and every run that follows
+ * the body's lines is wavy.
+ */
+function boxIsSquiggly(doc: RichTextDocument): boolean {
+  if (richTextRunIsSquiggly(doc.body, undefined)) return true;
+  if (!doc.body.decoration.includes('underline')) return false;
+  const following = doc.paragraphs.flatMap((p) =>
+    p.runs.filter((r) => r.text.length > 0 && r.style?.decoration === undefined),
+  );
+  return following.length > 0 && following.every((r) => richTextRunIsSquiggly(doc.body, r.style));
+}
+
+/** sommo-io fork: the runs without a wavy declaration of their own where
+ *  they follow the body's lines (so the body's style decides them). */
+function dropFollowingLineStyles(paragraphs: RichTextParagraph[]): RichTextParagraph[] {
+  return paragraphs.map((p) => ({
+    ...p,
+    runs: p.runs.map((r) => {
+      if (!r.style || r.style.decoration !== undefined || r.style.unknown === undefined) return r;
+      const { unknown: own, ...rest } = r.style;
+      const unknown = squigglyUnknown(own, false);
+      const style = unknown !== undefined ? { ...rest, unknown } : rest;
+      return Object.keys(style).length ? { ...r, style } : { text: r.text };
+    }),
+  }));
 }
 
 /**
@@ -64,16 +102,20 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
 const formattingBody = (a: Annot): Wire => {
   const doc = richDocOf(a);
   const t = a.text;
+  // sommo-io fork: squiggly is the body's underline style.
+  const { unknown: _unknown, ...body } = doc.body;
+  const unknown = squigglyUnknown(_unknown, t?.squiggly);
   return {
     richText: {
       body: {
-        ...doc.body,
+        ...body,
         weight: t?.bold ? 700 : 400,
         italic: !!t?.italic,
         // sommo-io fork: strikethrough joins underline in the decoration.
         decoration: decorationOf(t),
+        ...(unknown !== undefined ? { unknown } : {}),
       },
-      paragraphs: doc.paragraphs,
+      paragraphs: dropFollowingLineStyles(doc.paragraphs),
     },
   };
 };
@@ -181,6 +223,7 @@ export const freeText: KindProjection = {
     italic: formattingBody,
     underline: formattingBody,
     strikethrough: formattingBody,
+    squiggly: formattingBody,
   },
   // `/IT` + the initial `/Contents` are create-only statements; while typing,
   // the debounced text-edit write owns `contents`.

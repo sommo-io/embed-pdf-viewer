@@ -24,28 +24,42 @@ import {
   type RichTextStyleDelta,
   type TextStyle,
 } from '@embedpdf/core-annotation';
-import type {
-  FontHandle,
-  RichTextBody,
-  RichTextDocument,
-  RichTextParagraph,
-  RichTextRunStyle,
+import {
+  richTextDecorationStyle,
+  richTextRunIsSquiggly,
+  richTextWithDecorationStyle,
+  type FontHandle,
+  type RichTextBody,
+  type RichTextDocument,
+  type RichTextParagraph,
+  type RichTextRunStyle,
 } from '@embedpdf/engine-core/runtime';
 
-export type TextFormat = 'bold' | 'italic' | 'underline' | 'strikethrough';
+export type TextFormat = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'squiggly';
 
 /**
- * sommo-io fork: the decoration list the underline / strikethrough toggles
- * mean (an absent toggle is off).
+ * sommo-io fork: the decoration list the underline / strikethrough /
+ * squiggly toggles mean (an absent toggle is off). A squiggly underline is
+ * an `underline` whose style is wavy ({@link squigglyUnknown}).
  */
 export function decorationOf(t?: {
   underline?: boolean;
   strikethrough?: boolean;
+  squiggly?: boolean;
 }): RichTextRunStyle['decoration'] {
   return [
-    ...(t?.underline ? (['underline'] as const) : []),
+    ...(t?.underline || t?.squiggly ? (['underline'] as const) : []),
     ...(t?.strikethrough ? (['line-through'] as const) : []),
   ];
+}
+
+/** sommo-io fork: a body's `unknown` declarations with its underline style
+ *  set to wavy (squiggly) or dropped. */
+export function squigglyUnknown(
+  unknown: string | undefined,
+  squiggly: boolean | undefined,
+): string | undefined {
+  return richTextWithDecorationStyle(unknown, squiggly ? 'wavy' : undefined);
 }
 
 /** The editor's selection inside one free-text annotation: flat offsets over
@@ -70,6 +84,7 @@ export const RANGE_KEYS: readonly PropKey[] = [
   'italic',
   'underline',
   'strikethrough',
+  'squiggly',
 ];
 
 // ---- Faces ---------------------------------------------------------------------
@@ -213,6 +228,7 @@ export function bodyFromTextStyle(t: TextStyle, fonts?: FontLookup): RichTextBod
     size: t.fontSize,
     color: hex(t.fontColor),
     decoration: decorationOf(t),
+    ...(t.squiggly ? { unknown: squigglyUnknown(undefined, true) } : {}),
     script: 'normal',
     letterSpacing: 0,
     horizontalScale: 1,
@@ -287,12 +303,22 @@ export function stripBodyDefaults(
 export function runDeltaForProps(
   patch: AnnotationPropsPatch,
   fonts?: FontLookup,
-  /** sommo-io fork: the range's current underline / strikethrough, so one
-   *  toggle keeps the other line (a decoration delta replaces the list). */
-  current?: { underline?: boolean; strikethrough?: boolean },
-): { delta: RichTextStyleDelta; rest: AnnotationPropsPatch } {
+  /** sommo-io fork: the range's current underline / strikethrough /
+   *  squiggly, so one toggle keeps the other line (a decoration delta
+   *  replaces the list). */
+  current?: { underline?: boolean; strikethrough?: boolean; squiggly?: boolean },
+  /** sommo-io fork: the body's `unknown`, to tell whether its underline is
+   *  wavy (a straight range under a squiggly body says `solid`). */
+  bodyUnknown?: string,
+): {
+  delta: RichTextStyleDelta;
+  rest: AnnotationPropsPatch;
+  /** Run properties the range stops overriding (they follow the body). */
+  clear: (keyof RichTextRunStyle)[];
+} {
   const delta: RichTextStyleDelta = {};
   const rest: AnnotationPropsPatch = {};
+  const clear: (keyof RichTextRunStyle)[] = [];
   for (const key of Object.keys(patch) as PropKey[]) {
     const value = patch[key];
     if (value === undefined) continue;
@@ -318,16 +344,33 @@ export function runDeltaForProps(
         break;
       case 'underline':
       case 'strikethrough':
+      case 'squiggly': {
+        // sommo-io fork: one underline at a time — turning the straight or
+        // the wavy one on turns the other off.
+        let underline = patch.underline ?? current?.underline;
+        let squiggly = patch.squiggly ?? current?.squiggly;
+        if (patch.squiggly === true && patch.underline === undefined) underline = false;
+        if (patch.underline === true && patch.squiggly === undefined) squiggly = false;
         delta.decoration = decorationOf({
-          underline: patch.underline ?? current?.underline,
+          underline,
           strikethrough: patch.strikethrough ?? current?.strikethrough,
+          squiggly,
         });
+        const bodyWavy = richTextDecorationStyle(bodyUnknown) === 'wavy';
+        if (squiggly) delta.unknown = squigglyUnknown(undefined, true);
+        else if (bodyWavy) delta.unknown = richTextWithDecorationStyle(undefined, 'solid');
+        else if (!clear.includes('unknown')) clear.push('unknown');
+        if (delta.unknown !== undefined) {
+          const at = clear.indexOf('unknown');
+          if (at >= 0) clear.splice(at, 1);
+        }
         break;
+      }
       default:
         (rest as Record<string, unknown>)[key] = value;
     }
   }
-  return { delta, rest };
+  return { delta, rest, clear };
 }
 
 /** The style deltas of every non-empty run a range overlaps. */
@@ -365,7 +408,11 @@ export function rangeProps(
 ): { values: Partial<Record<PropKey, unknown>>; mixed: PropKey[] } {
   const runs = runsInRange(doc, range);
   const body = doc.body;
-  const resolve = (d: RichTextStyleDelta): Partial<RichTextRunStyle> => ({
+  // sommo-io fork: a squiggly run reads as squiggly, not as underlined.
+  const squiggly = new Map<RichTextStyleDelta, boolean>();
+  for (const d of runs.length ? runs : [{}]) squiggly.set(d, richTextRunIsSquiggly(body, d));
+  const resolve = (d: RichTextStyleDelta): Partial<RichTextRunStyle> & { squiggly: boolean } => ({
+    squiggly: squiggly.get(d) ?? false,
     family: d.family ?? body.family,
     weight: d.weight ?? body.weight,
     italic: d.italic ?? body.italic,
@@ -376,7 +423,10 @@ export function rangeProps(
   const styles = (runs.length ? runs : [{}]).map(resolve);
   const values: Partial<Record<PropKey, unknown>> = {};
   const mixed: PropKey[] = [];
-  const read = (key: PropKey, of: (s: Partial<RichTextRunStyle>) => unknown) => {
+  const read = (
+    key: PropKey,
+    of: (s: Partial<RichTextRunStyle> & { squiggly: boolean }) => unknown,
+  ) => {
     const first = of(styles[0]!);
     values[key] = first;
     if (styles.some((s) => JSON.stringify(of(s)) !== JSON.stringify(first))) mixed.push(key);
@@ -391,7 +441,8 @@ export function rangeProps(
   read('fontColor', (s) => s.color!.toLowerCase());
   read('bold', (s) => (s.weight ?? 400) >= 600);
   read('italic', (s) => !!s.italic);
-  read('underline', (s) => (s.decoration ?? []).includes('underline'));
+  read('underline', (s) => !s.squiggly && (s.decoration ?? []).includes('underline'));
   read('strikethrough', (s) => (s.decoration ?? []).includes('line-through'));
+  read('squiggly', (s) => s.squiggly);
   return { values, mixed };
 }

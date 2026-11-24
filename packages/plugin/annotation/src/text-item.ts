@@ -49,11 +49,13 @@ export function buildTextItems(m: Model, pon: number, view?: ViewEnv): TextItem[
         color: t.fontColor,
         fontWeight: t.bold ? 700 : 400,
         fontStyle: t.italic ? 'italic' : 'normal',
-        // sommo-io fork: strikethrough too.
+        // sommo-io fork: strikethrough too. A squiggly underline is drawn by
+        // the editor (`squiggly`), not as the browser's wavy line.
         textDecoration:
-          [t.underline ? 'underline' : '', t.strikethrough ? 'line-through' : '']
+          [t.underline && !t.squiggly ? 'underline' : '', t.strikethrough ? 'line-through' : '']
             .filter(Boolean)
             .join(' ') || 'none',
+        ...(t.squiggly ? { squiggly: true } : {}),
         align: t.textAlign,
         padding: textPlateInset(sw),
       },

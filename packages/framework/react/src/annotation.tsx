@@ -702,6 +702,8 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
     const b = attachRichTextEditor(el, host, {
       document: latest.current.item.richText,
       scale: latest.current.scale,
+      // sommo-io fork: the editor draws the body's squiggly underline.
+      squiggly: !!latest.current.item.css.squiggly,
     });
     binding.current = b;
     return () => {
@@ -725,7 +727,7 @@ function FreeText({ item, page }: { item: TextItem; page: PageContextValue }) {
       anno.setRichText(item.ref, doc);
       return;
     }
-    binding.current?.update({ document: item.richText, scale });
+    binding.current?.update({ document: item.richText, scale, squiggly: !!item.css.squiggly });
   }, [anno, item, scale]);
   // The element IS the engine's text PLATE (`SetPlateRect` + its `re W n`
   // clip): positioned at the padding inset with ZERO CSS padding, so the
@@ -998,13 +1000,7 @@ export function AnnotationLayer({ renderers }: AnnotationLayerProps = {}) {
       if (entry) {
         const Owner = entry.component;
         out = (
-          <Owner
-            item={item}
-            page={page}
-            appearance={baked ?? null}
-            native={native}
-            interactive
-          />
+          <Owner item={item} page={page} appearance={baked ?? null} native={native} interactive />
         );
       } else {
         out = null; // engaged but no renderer wired — the owner shows nothing
