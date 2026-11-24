@@ -94,6 +94,9 @@ export interface RichTextEditorProps {
   document: RichTextEditorDocument;
   /** Screen px per content unit (the page scale): sizes are content points. */
   scale: number;
+  /** sommo-io fork: the body's underline is squiggly (the element's own CSS
+   *  does not draw it): the runs that follow the body get the wave. */
+  squiggly?: boolean;
 }
 
 export interface RichTextEditorBinding {
@@ -119,6 +122,8 @@ export interface EditorStyle {
   textDecorationLine?: string;
   /** sommo-io fork: `wavy` for a squiggly underline. */
   textDecorationStyle?: string;
+  /** sommo-io fork: a squiggly run's own line is hidden (the editor draws the wave). */
+  textDecorationColor?: string;
   color: string;
   fontSize: string;
   fontFamily: string;
@@ -278,6 +283,9 @@ function applyStyleDelta(
   // sommo-io fork: a squiggly underline (after the shorthand, which resets it).
   const line = /(?:^|;)\s*text-decoration-style\s*:\s*(wavy|solid)\b/i.exec(delta.unknown ?? '');
   if (line) style.textDecorationStyle = line[1]!.toLowerCase();
+  // The browser's wavy line is not the saved one: the editor draws the wave
+  // (`squigglyWave`), the run keeps its underline for the document.
+  if (line?.[1]!.toLowerCase() === 'wavy') style.textDecorationColor = 'transparent';
   if (delta.color !== undefined) style.color = delta.color;
   if (delta.script !== undefined && delta.script !== 'normal') {
     // The engine's sub/superscript ratio; the size itself stays inherited.
@@ -315,6 +323,87 @@ function sameDelta(
   return true;
 }
 
+// ---- Squiggly underline (sommo-io fork) ------------------------------------------
+
+/**
+ * The saved squiggly underline is a zigzag (the appearance the engine bakes,
+ * and Edit text's): a half wave every 0.14 em, 0.045 em either side of a line
+ * 0.14 em under the baseline, stroked 0.05 em wide. The browser's own wavy
+ * line is round, smaller and sized by its own rules, so the editor hides it
+ * and paints this zigzag as the span's background instead: one period per
+ * tile, repeated along the run, in the run's colour and size.
+ */
+const WAVE = { halfStep: 0.14, amplitude: 0.045, width: 0.05, drop: 0.14 } as const;
+/** The tile's height: the zigzag plus room for its round joins. */
+const WAVE_TILE = WAVE.amplitude * 2 + WAVE.width * 2;
+
+export interface SquigglyWaveStyle {
+  backgroundImage: string;
+  backgroundRepeat: string;
+  backgroundSize: string;
+  backgroundPosition: string;
+}
+
+/**
+ * The background that draws the squiggly underline under an inline span.
+ * `descent` is the font's descent in em (the inline box ends there, under the
+ * baseline). With `strike`, a straight line-through is drawn too: the span's
+ * own lines are hidden, and its strikethrough with them.
+ */
+export function squigglyWave(
+  color: string,
+  descent: number,
+  strike?: { position: number; width: number },
+): SquigglyWaveStyle {
+  const unit = 100; // tile units per em
+  const w = WAVE.halfStep * 2 * unit;
+  const h = WAVE_TILE * unit;
+  const mid = h / 2;
+  const a = WAVE.amplitude * unit;
+  // Two periods either side so the joins at the tile's edges are drawn whole.
+  const points = [-w / 2, 0, w / 2, w, (w * 3) / 2]
+    .map((x, i) => `${round2(x)},${round2(mid + (i % 2 ? -a : a))}`)
+    .join(' ');
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="${WAVE.width * unit}" ` +
+    `stroke-linejoin="round"/></svg>`;
+  // The tile's middle sits `drop` under the baseline, the inline box's
+  // bottom `descent` under it; a tile that would hang out sits on the bottom.
+  const lift = Math.max(0, descent - WAVE.drop - WAVE_TILE / 2);
+  const wave: SquigglyWaveStyle = {
+    backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+    backgroundRepeat: 'repeat-x',
+    backgroundSize: `${round2(WAVE.halfStep * 2 * 1000) / 1000}em ${round2(WAVE_TILE * 1000) / 1000}em`,
+    backgroundPosition: `0 calc(100% - ${round2(lift * 1000) / 1000}em)`,
+  };
+  if (!strike) return wave;
+  const line = `linear-gradient(${color}, ${color})`;
+  const above = Math.max(0, descent + strike.position - strike.width / 2);
+  return {
+    backgroundImage: `${wave.backgroundImage}, ${line}`,
+    backgroundRepeat: `${wave.backgroundRepeat}, repeat-x`,
+    backgroundSize: `${wave.backgroundSize}, 100% ${round2(strike.width * 1000) / 1000}em`,
+    backgroundPosition: `${wave.backgroundPosition}, 0 calc(100% - ${round2(above * 1000) / 1000}em)`,
+  };
+}
+
+/** Whether a span's own declarations make its underline squiggly: `true`,
+ *  `false`, or `undefined` when it follows its parent (as the engine reads a
+ *  run: its own decoration-style, else the body's, under an underline). */
+export function ownSquiggly(style: EditorStyle | undefined): boolean | undefined {
+  if (!style) return undefined;
+  const text = style.textDecoration ?? '';
+  const lines = style.textDecorationLine || text;
+  const kind =
+    style.textDecorationStyle || text.split(/\s+/).find((p) => p === 'wavy' || p === 'solid');
+  const stated = /\b(underline|line-through|none)\b/.test(lines);
+  if (stated && !/\bunderline\b/.test(lines)) return false;
+  if (kind === 'wavy') return stated ? true : undefined;
+  if (kind === 'solid') return false;
+  return undefined;
+}
+
 // ---- Render -------------------------------------------------------------------
 
 /** Render a document into the element: one block per paragraph, one span per
@@ -323,7 +412,7 @@ function sameDelta(
 export function renderRichText(
   root: EditorRoot,
   doc: RichTextEditorDocument,
-  options: { scale: number; cssFontFamily: (family: string) => string },
+  options: { scale: number; cssFontFamily: (family: string) => string; squiggly?: boolean },
 ): void {
   const factory = root.ownerDocument;
   if (!factory) return;
@@ -341,6 +430,11 @@ export function renderRichText(
       if (run.style && Object.keys(run.style).length) {
         container = factory.createElement('span');
         applyStyleDelta(container.style, run.style, options.scale, options.cssFontFamily);
+        block.appendChild(container);
+      } else if (options.squiggly && run.text) {
+        // sommo-io fork: the wave is a span's background, so under a squiggly
+        // body a plain run gets a span of its own (no style: no delta).
+        container = factory.createElement('span');
         block.appendChild(container);
       }
       const pieces = run.text.split(/\r\n|\r|\n/);
@@ -698,6 +792,78 @@ export function attachRichTextEditor(
     el.style.lineHeight = String(lineHeight);
     for (const run of runs) run.node.style.lineHeight = String(run.lineHeight);
     applyFirstLineShift(root, shift);
+    drawWaves(measureFor);
+  };
+
+  // sommo-io fork: the squiggly underline is painted by the editor (see
+  // `squigglyWave`): on each span whose underline is squiggly and whose parent
+  // span does not paint it already. Its own lines are hidden for that.
+  const drawWaves = (
+    measureFor: (face: {
+      family: string;
+      weight: string;
+      style: string;
+    }) => (family: string) => WebFontMetrics | null,
+  ) => {
+    const spans = Array.from(el.querySelectorAll<HTMLElement>('span'));
+    if (!spans.length) return;
+    const memo = new Map<HTMLElement, boolean>();
+    const waved = (node: HTMLElement | null): boolean => {
+      if (!node || node === el || node.tagName !== 'SPAN') return !!props.squiggly;
+      let known = memo.get(node);
+      if (known === undefined) {
+        known = ownSquiggly(node.style) ?? waved(node.parentElement);
+        memo.set(node, known);
+      }
+      return known;
+    };
+    const styles = spans.map((node) => ({
+      node,
+      on: waved(node) && !(node.parentElement?.tagName === 'SPAN' && waved(node.parentElement)),
+      computed: doc.defaultView?.getComputedStyle(node) ?? node.style,
+    }));
+    for (const { node, on, computed } of styles) {
+      const own = node.style.textDecorationLine || node.style.textDecoration || '';
+      const ownLines = /\b(underline|line-through)\b/.test(own);
+      if (!on) {
+        node.style.backgroundImage = '';
+        node.style.backgroundRepeat = '';
+        node.style.backgroundSize = '';
+        node.style.backgroundPosition = '';
+        if (ownLines) node.style.textDecorationColor = '';
+        continue;
+      }
+      const face = {
+        family: computed.fontFamily,
+        weight: computed.fontWeight,
+        style: computed.fontStyle,
+      };
+      const descent = measureFor(face)(face.family)?.descent ?? 0.22;
+      const strike = /\bline-through\b/.test(own) ? { position: 0.28, width: 0.06 } : undefined;
+      const wave = squigglyWave(computed.color || 'currentColor', descent, strike);
+      node.style.backgroundImage = wave.backgroundImage;
+      node.style.backgroundRepeat = wave.backgroundRepeat;
+      node.style.backgroundSize = wave.backgroundSize;
+      node.style.backgroundPosition = wave.backgroundPosition;
+      if (ownLines) node.style.textDecorationColor = 'transparent';
+    }
+  };
+
+  // sommo-io fork: under a squiggly body, text typed into a block of its own
+  // (an empty box, a new line) is a bare text node; the wave needs a span.
+  const wrapBareText = (): boolean => {
+    if (!props.squiggly) return false;
+    let wrapped = false;
+    for (const block of Array.from(el.children)) {
+      for (const node of Array.from(block.childNodes)) {
+        if (node.nodeType !== TEXT_NODE || !node.nodeValue) continue;
+        const span = doc.createElement('span');
+        block.insertBefore(span, node);
+        span.appendChild(node);
+        wrapped = true;
+      }
+    }
+    return wrapped;
   };
 
   const render = (document: RichTextEditorDocument, keepSelection: boolean) => {
@@ -705,6 +871,7 @@ export function attachRichTextEditor(
     renderRichText(root, document, {
       scale: props.scale,
       cssFontFamily: host.cssFontFamily,
+      squiggly: props.squiggly,
     });
     refreshLineModel();
     rendered = document;
@@ -715,6 +882,8 @@ export function attachRichTextEditor(
     // Enter splits a block by CLONING its style attribute, so the first
     // block's shift would ride onto the new paragraph: keep it on the first
     // block alone, whatever the browser produced.
+    const selection = props.squiggly ? currentSelection() : null;
+    if (wrapBareText() && selection) select(selection);
     refreshLineModel();
     const document = serializeRichText(root, props.scale);
     rendered = document;
@@ -765,12 +934,19 @@ export function attachRichTextEditor(
   return {
     update(next: RichTextEditorProps) {
       const scaleChanged = next.scale !== props.scale;
+      // sommo-io fork: the body's squiggly underline is drawn per span.
+      const squigglyChanged = !!next.squiggly !== !!props.squiggly;
       props = next;
       // Our own input echoes back through the host unchanged: no re-render,
       // the caret stays where the browser put it. Anything else (a restyle,
       // a remote edit, a scale change) re-renders and restores the caret.
       if (composing) return;
-      if (!rendered || scaleChanged || !documentsEqual(next.document, rendered)) {
+      if (
+        !rendered ||
+        scaleChanged ||
+        squigglyChanged ||
+        !documentsEqual(next.document, rendered)
+      ) {
         render(next.document, activeElement() === el);
         return;
       }

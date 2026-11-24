@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   attachRichTextEditor,
   offsetOfPosition,
+  ownSquiggly,
+  squigglyWave,
   positionOfOffset,
   renderRichText,
   serializeRichText,
@@ -268,6 +270,75 @@ describe('styleDeltaOf', () => {
       decoration: ['underline'],
       unknown: 'text-decoration-style:wavy',
     });
+  });
+});
+
+// sommo-io fork: the editor paints the saved zigzag instead of the browser's wavy line.
+describe('squiggly underline', () => {
+  it('gives plain runs under a squiggly body a span of their own, and no delta', () => {
+    const el = root();
+    const doc: RichTextEditorDocument = {
+      paragraphs: [{ runs: [{ text: 'wavy ' }, { text: 'bold', style: { weight: 700 } }] }],
+    };
+    renderRichText(el, doc, { scale: 1, cssFontFamily, squiggly: true });
+    expect(el.childNodes[0]!.childNodes.map((n) => n.nodeName)).toEqual(['SPAN', 'SPAN']);
+    expect(serializeRichText(el, 1)).toEqual(doc);
+    renderRichText(el, doc, { scale: 1, cssFontFamily });
+    expect(el.childNodes[0]!.childNodes.map((n) => n.nodeName)).toEqual(['#text', 'SPAN']);
+  });
+
+  it("hides a squiggly run's own line and keeps it for the document", () => {
+    const el = root();
+    const doc: RichTextEditorDocument = {
+      paragraphs: [
+        {
+          runs: [
+            {
+              text: 'wavy',
+              style: { decoration: ['underline'], unknown: 'text-decoration-style:wavy' },
+            },
+          ],
+        },
+      ],
+    };
+    renderRichText(el, doc, { scale: 1, cssFontFamily });
+    const span = el.childNodes[0]!.childNodes[0]!;
+    expect(span.style!.textDecorationColor).toBe('transparent');
+    expect(serializeRichText(el, 1)).toEqual(doc);
+  });
+
+  it('reads which spans are squiggly the way the engine reads runs', () => {
+    const style = (extra: Partial<EditorStyle>) => ({ ...emptyStyle(), ...extra });
+    expect(ownSquiggly(style({ textDecoration: 'underline', textDecorationStyle: 'wavy' }))).toBe(
+      true,
+    );
+    expect(ownSquiggly(style({ textDecoration: 'underline', textDecorationStyle: 'solid' }))).toBe(
+      false,
+    );
+    expect(ownSquiggly(style({ textDecoration: 'line-through' }))).toBe(false);
+    expect(ownSquiggly(style({ textDecoration: 'none' }))).toBe(false);
+    // Its own underline with no style of its own follows the parent (the body).
+    expect(ownSquiggly(style({ textDecoration: 'underline' }))).toBeUndefined();
+    expect(ownSquiggly(style({ fontWeight: '700' }))).toBeUndefined();
+  });
+
+  it('draws the zigzag in em: 0.28 em per period, 0.14 em under the baseline', () => {
+    const wave = squigglyWave('rgb(255, 0, 0)', 0.21);
+    expect(wave.backgroundRepeat).toBe('repeat-x');
+    expect(wave.backgroundSize).toBe('0.28em 0.19em');
+    // descent 0.21 - drop 0.14 - half the tile 0.095: under the box bottom, so on it.
+    expect(wave.backgroundPosition).toBe('0 calc(100% - 0em)');
+    const svg = decodeURIComponent(
+      wave.backgroundImage.slice('url("data:image/svg+xml,'.length, -2),
+    );
+    expect(svg).toContain('stroke="rgb(255, 0, 0)"');
+    expect(svg).toContain('stroke-width="5"');
+    expect(svg).toContain('points="-14,14 0,5 14,14 28,5 42,14"');
+    // A deeper font lifts it; a strikethrough adds a straight layer.
+    expect(squigglyWave('black', 0.4).backgroundPosition).toBe('0 calc(100% - 0.165em)');
+    const struck = squigglyWave('black', 0.21, { position: 0.28, width: 0.06 });
+    expect(struck.backgroundImage).toContain('linear-gradient(black, black)');
+    expect(struck.backgroundPosition).toBe('0 calc(100% - 0em), 0 calc(100% - 0.46em)');
   });
 });
 

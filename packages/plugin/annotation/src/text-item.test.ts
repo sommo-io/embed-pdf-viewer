@@ -118,3 +118,30 @@ describe('buildTextItems — the editor document', () => {
     ]);
   });
 });
+
+// sommo-io fork: the editor draws a squiggly underline, not the browser.
+describe('buildTextItems — squiggly underline', () => {
+  it('leaves the wavy line out of the CSS and says squiggly instead', () => {
+    const item = (text: Record<string, unknown>) => {
+      const a = freeText('S1', { t: 'text', rect: { x: 10, y: 10, width: 80, height: 30 } }, 1);
+      (a as { text?: unknown }).text = {
+        fontFamily: 'helvetica',
+        fontSize: 12,
+        fontColor: '#000000',
+        textAlign: 'left',
+        ...text,
+      };
+      let m = update(initialModel, { t: 'loaded', annots: [a] })[0];
+      m = update(m, { t: 'beginTextEdit', id: 'S1' })[0];
+      return buildTextItems(m, PON)[0]!.css;
+    };
+    expect(item({ squiggly: true })).toMatchObject({ textDecoration: 'none', squiggly: true });
+    expect(item({ squiggly: true, strikethrough: true })).toMatchObject({
+      textDecoration: 'line-through',
+      squiggly: true,
+    });
+    const straight = item({ underline: true });
+    expect(straight.textDecoration).toBe('underline');
+    expect(straight.squiggly).toBeUndefined();
+  });
+});
