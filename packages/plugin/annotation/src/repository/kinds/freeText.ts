@@ -6,6 +6,8 @@
  */
 import {
   richTextRunIsSquiggly,
+  type RichTextDocument,
+  type RichTextParagraph,
   type AnnotationDTO,
   type CalloutLine,
   type LineEnding,
@@ -50,7 +52,7 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
     ...(body && body.weight >= 600 ? { bold: true } : {}),
     ...(body?.italic ? { italic: true } : {}),
     // sommo-io fork: a wavy underline is the squiggly toggle, not underline.
-    ...(body && richTextRunIsSquiggly(body, undefined)
+    ...(dto.richText && boxIsSquiggly(dto.richText)
       ? { squiggly: true }
       : body?.decoration.includes('underline')
         ? { underline: true }
@@ -58,6 +60,36 @@ function textFromDTO(dto: FreeTextDTO): TextStyle {
     // sommo-io fork: strikethrough is the body's `line-through`.
     ...(body?.decoration.includes('line-through') ? { strikethrough: true } : {}),
   };
+}
+
+/**
+ * sommo-io fork: is the whole box's underline wavy? Its body says so, or —
+ * as the engine reads a saved box back, the body's `text-decoration-style`
+ * moved onto the runs — the body is underlined and every run that follows
+ * the body's lines is wavy.
+ */
+function boxIsSquiggly(doc: RichTextDocument): boolean {
+  if (richTextRunIsSquiggly(doc.body, undefined)) return true;
+  if (!doc.body.decoration.includes('underline')) return false;
+  const following = doc.paragraphs.flatMap((p) =>
+    p.runs.filter((r) => r.text.length > 0 && r.style?.decoration === undefined),
+  );
+  return following.length > 0 && following.every((r) => richTextRunIsSquiggly(doc.body, r.style));
+}
+
+/** sommo-io fork: the runs without a wavy declaration of their own where
+ *  they follow the body's lines (so the body's style decides them). */
+function dropFollowingLineStyles(paragraphs: RichTextParagraph[]): RichTextParagraph[] {
+  return paragraphs.map((p) => ({
+    ...p,
+    runs: p.runs.map((r) => {
+      if (!r.style || r.style.decoration !== undefined || r.style.unknown === undefined) return r;
+      const { unknown: own, ...rest } = r.style;
+      const unknown = squigglyUnknown(own, false);
+      const style = unknown !== undefined ? { ...rest, unknown } : rest;
+      return Object.keys(style).length ? { ...r, style } : { text: r.text };
+    }),
+  }));
 }
 
 /**
@@ -83,7 +115,7 @@ const formattingBody = (a: Annot): Wire => {
         decoration: decorationOf(t),
         ...(unknown !== undefined ? { unknown } : {}),
       },
-      paragraphs: doc.paragraphs,
+      paragraphs: dropFollowingLineStyles(doc.paragraphs),
     },
   };
 };

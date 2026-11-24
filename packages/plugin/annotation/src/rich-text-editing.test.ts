@@ -4,7 +4,12 @@
  * engine — the same for every framework's glue.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AnnotationDTO, AnnotationFlags, AnnotationRef } from '@embedpdf/engine-core/runtime';
+import type {
+  AnnotationDTO,
+  AnnotationFlags,
+  AnnotationRef,
+  RichTextParagraph,
+} from '@embedpdf/engine-core/runtime';
 import type { PluginContext } from '@embedpdf/core';
 
 import { createAnnotationCapability } from './capability';
@@ -30,7 +35,9 @@ const REF: AnnotationRef = { kind: 'objectNumber', pageObjectNumber: PON, annotO
 const freeTextDTO = (
   contents: string,
   extra: Record<string, unknown> = {},
-  paragraphs = contents.split('\r').map((line) => ({ runs: [{ text: line }] })),
+  paragraphs: RichTextParagraph[] = contents
+    .split('\r')
+    .map((line) => ({ runs: [{ text: line }] })),
 ): AnnotationDTO =>
   ({
     ref: REF,
@@ -249,6 +256,28 @@ describe('the property surface while editing', () => {
     h.capability.toggleTextFormat('strikethrough');
     expect(h.capability.getSelectionProps().values.strikethrough).toBe(true);
     expect(h.capability.getSelectionProps().values.underline).toBe(true);
+  });
+
+  // sommo-io fork: a saved squiggly box comes back with the body underlined and
+  // the wavy style moved onto the runs; it still reads as squiggly.
+  it('reads a reopened squiggly box back as squiggly, and underline replaces it', async () => {
+    const wavy = { unknown: 'text-decoration-style:wavy' };
+    const dto = freeTextDTO('wavy words', {}, [{ runs: [{ text: 'wavy words', style: wavy }] }]);
+    (dto as { richText: { body: { decoration: string[] } } }).richText.body.decoration = [
+      'underline',
+    ];
+    const h = await loaded(dto);
+    h.capability.select(REF);
+    expect(h.capability.getSelectionProps().values).toMatchObject({
+      squiggly: true,
+      underline: false,
+    });
+    h.capability.updateSelection({ underline: true });
+    const write = h.update.mock.calls.find((c) => c[1].richText?.body)?.[1];
+    expect(write.richText.body.decoration).toEqual(['underline']);
+    expect(write.richText.body.unknown).toBeUndefined();
+    // The runs' own wavy style goes with it: the body decides them again.
+    expect(write.richText.paragraphs).toEqual([{ runs: [{ text: 'wavy words' }] }]);
   });
 
   it('keeps non-text keys on the annotation and lands the text before them', async () => {
